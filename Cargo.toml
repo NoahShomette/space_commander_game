@@ -1,5 +1,5 @@
 [package]
-name = "space_defender_game"
+name = "space_commander_game"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,4 +15,8 @@ opt-level = 3
 
 [dependencies]
 bevy = "0.8.1"
+bevy_kira_audio = "0.12.0"
 bevy_rapier2d = "0.17.0"
+rand = "0.8.5"
+wasm-bindgen = "0.2.83"
+wasm-server-runner = "0.3.0"
