@@ -1,10 +1,12 @@
 ﻿use bevy::prelude::*;
+use iyes_loopless::prelude::AppLooplessStateExt;
+use crate::GameState;
 
 pub struct GameSystems;
 
 impl Plugin for GameSystems {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_game_systems);
+        app.add_enter_system(GameState::MainMenu, setup_game_systems);
     }
 }
 
