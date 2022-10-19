@@ -1,1 +1,1 @@
-﻿mod scanner_core;
+﻿pub(crate) mod scanner_core;

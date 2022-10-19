@@ -44,7 +44,7 @@ fn outside_backgrounds(
     let wnd = windows.get_primary().unwrap();
 
     let my_frame = Frame {
-        fill: Color32::from_rgba_unmultiplied(18, 78, 137, 255),
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
         stroke: Stroke::new(0., Color32::WHITE),
         ..default()
     };
@@ -56,19 +56,25 @@ fn outside_backgrounds(
         .frame(my_frame)
         .resizable(false)
         .min_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
-        .show(egui_context.ctx_mut(), |ui| {});
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.label(&format!("{}:{}", player_stats.current_energy, player_stats.max_energy))
+            });
+        });
 
     SidePanel::right("right_background")
         .frame(my_frame)
         .resizable(false)
         .min_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
+        .max_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
+
         .show(egui_context.ctx_mut(), |ui| {
             let mut style = ui.style_mut();
             style.visuals.override_text_color = Some(Color32::from_rgb(255, 255, 255));
             //style.visuals.widgets.active.bg_fill = DESELECTED_COLOR;
 
-            ui.image(logo, [512.0, 256.0]);
             ui.vertical_centered_justified(|ui| {
+                ui.image(logo, [384.0, 192.0]);
                 ui.label(&format!("SCORE: {}", player_stats.score))
             });
         });

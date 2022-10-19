@@ -15,6 +15,7 @@ use bevy::render::texture::ImageSettings;
 use bevy::window::{close_on_esc, WindowMode};
 use bevy_egui::*;
 use bevy_rapier2d::prelude::*;
+use crate::enemy::EnemyPlugin;
 
 
 fn main() {
@@ -26,7 +27,7 @@ fn main() {
                 .with_collection::<AssetHolder>(),
         )
         //default resources needed
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::rgba(0.05, 0.05, 0.1, 1.0)))
         .insert_resource(ImageSettings::default_nearest())
         .insert_resource(WindowDescriptor {
             title: "Space Commander".to_string(),
@@ -48,6 +49,7 @@ fn main() {
         .add_plugin(GameSystems)
         .add_plugin(PlayerPlugin)
         .add_plugin(UiPlugin)
+        .add_plugin(EnemyPlugin)
         //
         //temp testing plugins
         .add_system(close_on_esc)
@@ -74,8 +76,15 @@ struct AssetHolder {
     pub player_missile: Handle<Image>,
     #[asset(path = "player_missile_explosion.png")]
     pub player_missile_explosion: Handle<Image>,
+    #[asset(path = "player_missile_target.png")]
+    pub player_missile_target: Handle<Image>,
     #[asset(path = "space_commander_logo.png")]
     pub logo: Handle<Image>,
+
+    #[asset(path = "enemy.png")]
+    pub enemy: Handle<Image>,
+    #[asset(path = "enemy_ghost.png")]
+    pub enemy_ghost: Handle<Image>,
     /*
     #[asset(path = "music.ogg")]
     pub music: Handle<bevy_kira_audio::prelude::AudioSource>,

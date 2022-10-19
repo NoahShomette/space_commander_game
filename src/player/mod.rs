@@ -1,58 +1,93 @@
-﻿mod player_missiles;
+﻿mod input;
+mod player_missiles;
 mod scanner;
+mod shield;
 
-use crate::helpers::*;
 use crate::player::player_missiles::player_missile_core::*;
+use crate::player::scanner::scanner_core::*;
 use crate::{AssetHolder, GameState};
+use crate::player::input::input_manager::*;
+
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
+use crate::player::shield::shield_core::ShieldPlugin;
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_enter_system(GameState::Playing, setup_player)
+        app.add_plugin(ScannerPlugin)
+            .add_enter_system(GameState::Playing, setup_player)
             .init_resource::<PlayerStats>()
-            .add_event::<SpawnMissileEvent>()
+            //main player loop
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(GameState::Playing)
                     .label("main_player_loop")
-                    .with_system(player_input)
-                    .with_system(
-                        handle_player_missile_spawn_events.run_on_event::<SpawnMissileEvent>(),
-                    )
-                    .with_system(update_missiles)
-                    .into(),
-            )
-            .add_system_set(
-                ConditionSet::new()
-                    .run_in_state(GameState::Playing)
-                    .after("main_player_loop")
-                    .with_system(missile_explode)
                     .with_system(handle_player_energy_recharge)
                     .into(),
-            );
+            )
+            .add_plugin(PlayerInputPlugin)
+            .add_plugin(ShieldPlugin)
+            .add_plugin(PlayerMissilePlugin);
     }
 }
 
 pub struct PlayerStats {
-    max_energy: u32,
-    current_energy: u32,
-    energy_recharge_rate: f32,
-    time_till_next_energy: f32,
-    energy_per_recharge: u32,
+    pub(crate) is_regaining_energy: bool,
+    pub(crate) max_energy: u32,
+    pub(crate) current_energy: u32,
+    pub(crate) energy_recharge_rate: f32,
+    pub(crate) time_till_next_energy: f32,
+    pub(crate) energy_per_recharge: u32,
 
-    missile_speed: f32,
-    missile_explosion_radius: f32,
-    missile_energy_cost: u32,
+    pub(crate) missile_speed: f32,
+    pub(crate) missile_explosion_radius: f32,
+    pub(crate) missile_energy_cost: u32,
 
-    current_points: u32,
+    pub(crate) current_points: u32,
     pub(crate) score: u32,
+
+    pub(crate) scan_speed: f32,
+    pub(crate) scan_energy_cost: u32,
+
+    pub(crate) shield_energy_cost: u32,
+    pub(crate) shield_cost_rate: f32,
+
+}
+
+
+impl FromWorld for PlayerStats {
+    fn from_world(_world: &mut World) -> Self {
+        PlayerStats {
+            is_regaining_energy: true,
+            max_energy: 6,
+            current_energy: 6,
+            energy_recharge_rate: 2.0,
+            time_till_next_energy: 2.0,
+            energy_per_recharge: 1,
+
+            missile_speed: 200.,
+            missile_explosion_radius: 0.0,
+            missile_energy_cost: 1,
+            current_points: 0,
+            score: 0,
+
+            scan_speed: 100.0,
+            scan_energy_cost: 3,
+
+            shield_energy_cost: 1,
+            shield_cost_rate: 1.0,
+        }
+    }
 }
 
 impl PlayerStats {
+    pub(crate) fn toggle_is_regaining_energy(&mut self) {
+        self.is_regaining_energy = !self.is_regaining_energy;
+    }
+
     pub(crate) fn recharge_energy(&mut self) {
         self.current_energy += self.energy_per_recharge;
         if self.current_energy > self.max_energy {
@@ -71,25 +106,16 @@ impl PlayerStats {
     pub(crate) fn missile_fired(&mut self) {
         self.current_energy -= self.missile_energy_cost;
     }
-}
 
-impl FromWorld for PlayerStats {
-    fn from_world(_world: &mut World) -> Self {
-        PlayerStats {
-            max_energy: 6,
-            current_energy: 6,
-            energy_recharge_rate: 4.0,
-            time_till_next_energy: 4.0,
-            energy_per_recharge: 1,
+    pub(crate) fn scanner_fired(&mut self) {
+        self.current_energy -= self.scan_energy_cost;
+    }
 
-            missile_speed: 200.,
-            missile_explosion_radius: 0.0,
-            missile_energy_cost: 1,
-            current_points: 0,
-            score: 0,
-        }
+    pub(crate) fn shield_cost(&mut self) {
+        self.current_energy -= self.shield_energy_cost;
     }
 }
+
 
 fn setup_player(mut commands: Commands, sprites: Res<AssetHolder>) {
     commands.spawn_bundle(PlayerBundle::new(sprites));
@@ -142,40 +168,8 @@ impl PlayerBundle {
     }
 }
 
-pub fn player_input(
-    keyboard_input: Res<Input<MouseButton>>,
-    mut spawn_missile_event_writer: EventWriter<SpawnMissileEvent>,
-    windows: Res<Windows>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-) {
-    if keyboard_input.just_pressed(MouseButton::Left) {
-        if mouse_virtual_play_field_check(&windows, &camera_query) {
-            let mouse_world_pos = mouse_screen_pos_to_world_pos(windows, camera_query);
-            spawn_missile_event_writer.send(SpawnMissileEvent {
-                target: mouse_world_pos,
-            });
-        }
-    }
-}
-
-pub fn handle_player_missile_spawn_events(
-    asset_server: Res<AssetServer>,
-    mut player_stats: ResMut<PlayerStats>,
-    mut commands: Commands,
-    mut spawn_missile_event_reader: EventReader<SpawnMissileEvent>,
-) {
-    for event in spawn_missile_event_reader.iter() {
-        PlayerMissile::spawn(
-            &asset_server,
-            &mut player_stats,
-            &mut commands,
-            event.target,
-        );
-    }
-}
-
 pub fn handle_player_energy_recharge(mut player_stats: ResMut<PlayerStats>, time: Res<Time>) {
-    if player_stats.current_energy < player_stats.max_energy {
+    if player_stats.current_energy < player_stats.max_energy && player_stats.is_regaining_energy {
         player_stats.time_till_next_energy -= time.delta_seconds();
         if player_stats.time_till_next_energy <= 0. {
             player_stats.time_till_next_energy = player_stats.energy_recharge_rate;
