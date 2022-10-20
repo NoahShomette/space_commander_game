@@ -1,6 +1,7 @@
-﻿use crate::player::input::input_manager::PlayerInputEvents;
+﻿use crate::enemy::{Destroyed, Enemy};
+use crate::player::input::input_manager::PlayerInputEvents;
 use crate::player::scanner::scanner_core::scan;
-use crate::{AssetHolder, GameState, PlayerStats};
+use crate::{AssetHolder, GameState, Player, PlayerStats};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::FillMode;
 use bevy_prototype_lyon::prelude::*;
@@ -39,6 +40,7 @@ impl Plugin for ShieldPlugin {
                 .label("shield_loop")
                 .with_system(handle_player_shield_events.run_on_event::<PlayerInputEvents>())
                 .with_system(shield_count_cost.run_if(is_shield_active))
+                .with_system(handle_player_planet_collisions.run_if(is_shield_active))
                 .into(),
         );
 
@@ -143,5 +145,18 @@ pub(crate) fn remove_shield(
 ) {
     for entity in shield_query.iter() {
         commands.entity(entity).despawn();
+    }
+}
+
+pub(crate) fn handle_player_planet_collisions(
+    mut shield: Query<(&CollidingEntities), With<ShieldComp>>,
+    mut enemy_entities: Query<&Enemy>,
+    mut commands: Commands,
+) {
+    let shield = shield.single_mut();
+    for collision in shield.iter() {
+        if let Ok(_enemy) = enemy_entities.get(collision) {
+            commands.entity(collision).insert(Destroyed);
+        }
     }
 }

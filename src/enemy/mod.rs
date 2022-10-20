@@ -57,7 +57,7 @@ impl Enemy {
             z: 0.0,
         };
         let ghost_entity = commands
-            .spawn_bundle(GhostEnemyBundle::new(&sprites, Vec2 { x: 300., y: 300. }))
+            .spawn_bundle(GhostEnemyBundle::new(&sprites, spawn_location_local.clone()))
             .id();
         commands.spawn_bundle(EnemyBundle::new(
             &sprites,
@@ -118,7 +118,7 @@ impl EnemyBundle {
                 computed_visibility: Default::default(),
             },
             rigidbody: RigidBody::Dynamic,
-            collider: Collider::ball(8.),
+            collider: Collider::ball(5.),
             gravity_scale: GravityScale(0.),
             enemy: Enemy {
                 scan_ghost: ghost_entity,

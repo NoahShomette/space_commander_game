@@ -6,7 +6,7 @@ pub struct GameSystems;
 
 impl Plugin for GameSystems {
     fn build(&self, app: &mut App) {
-        app.add_enter_system(GameState::MainMenu, setup_game_systems);
+        app.add_enter_system(GameState::GameSetupOnce, setup_game_systems);
     }
 }
 

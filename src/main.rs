@@ -23,9 +23,11 @@ fn main() {
         .add_loopless_state(GameState::AssetLoading)
         .add_loading_state(
             LoadingState::new(GameState::AssetLoading)
-                .continue_to_state(GameState::MainMenu)
+                .continue_to_state(GameState::GameSetupOnce)
                 .with_collection::<AssetHolder>(),
         )
+
+        .add_enter_system(GameState::GameSetupOnce, leave_game_setup_state)
         //default resources needed
         .insert_resource(ClearColor(Color::rgba(0.05, 0.05, 0.1, 1.0)))
         .insert_resource(ImageSettings::default_nearest())
@@ -60,6 +62,7 @@ fn main() {
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
     AssetLoading,
+    GameSetupOnce,
     MainMenu,
     Tutorial,
     Playing,
@@ -85,6 +88,9 @@ struct AssetHolder {
     pub enemy: Handle<Image>,
     #[asset(path = "enemy_ghost.png")]
     pub enemy_ghost: Handle<Image>,
+
+    #[asset(path = "warning_sprite.png")]
+    pub warning: Handle<Image>,
     /*
     #[asset(path = "music.ogg")]
     pub music: Handle<bevy_kira_audio::prelude::AudioSource>,
@@ -99,4 +105,8 @@ struct AssetHolder {
     #[asset(path = "background.png")]
     pub background: Handle<Image>,
     */
+}
+
+fn leave_game_setup_state(mut commands: Commands) {
+    commands.insert_resource(NextState(GameState::MainMenu));
 }

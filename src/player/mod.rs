@@ -11,6 +11,7 @@ use crate::player::input::input_manager::*;
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
+use crate::enemy::{Destroyed, Enemy};
 use crate::player::shield::shield_core::ShieldPlugin;
 
 pub struct PlayerPlugin;
@@ -18,7 +19,8 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(ScannerPlugin)
-            .add_enter_system(GameState::Playing, setup_player)
+            .add_enter_system(GameState::GameSetupOnce, setup_player)
+            //.add_exit_system(GameState::Playing, setup_player) //use this to rs
             .init_resource::<PlayerStats>()
             //main player loop
             .add_system_set(
@@ -26,6 +28,7 @@ impl Plugin for PlayerPlugin {
                     .run_in_state(GameState::Playing)
                     .label("main_player_loop")
                     .with_system(handle_player_energy_recharge)
+                    .with_system(handle_player_planet_collisions)
                     .into(),
             )
             .add_plugin(PlayerInputPlugin)
@@ -75,7 +78,7 @@ impl FromWorld for PlayerStats {
             score: 0,
 
             scan_speed: 100.0,
-            scan_energy_cost: 3,
+            scan_energy_cost: 2,
 
             shield_energy_cost: 1,
             shield_cost_rate: 1.0,
@@ -175,6 +178,20 @@ pub fn handle_player_energy_recharge(mut player_stats: ResMut<PlayerStats>, time
             player_stats.time_till_next_energy = player_stats.energy_recharge_rate;
             player_stats.recharge_energy();
             info!("{}", player_stats.current_energy)
+        }
+    }
+}
+
+pub(crate) fn handle_player_planet_collisions(
+    mut missiles: Query<(&CollidingEntities), With<Player>>,
+    mut enemy_entities: Query<&Enemy>,
+    mut commands: Commands,
+) {
+    for entities in missiles.iter_mut() {
+        for collision in entities.iter() {
+            if let Ok(_enemy) = enemy_entities.get(collision) {
+                commands.insert_resource(NextState(GameState::MainMenu));
+            }
         }
     }
 }

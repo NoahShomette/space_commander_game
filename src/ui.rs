@@ -16,7 +16,6 @@ impl Plugin for UiPlugin {
         app.add_system_set(
             ConditionSet::new()
                 .run_in_state(GameState::MainMenu)
-                .with_system(if_start_game)
                 .with_system(outside_backgrounds)
                 .into(),
         )
@@ -29,11 +28,7 @@ impl Plugin for UiPlugin {
     }
 }
 
-pub fn if_start_game(keyboard_input: Res<Input<KeyCode>>, mut commands: Commands) {
-    if keyboard_input.just_pressed(KeyCode::Space) {
-        commands.insert_resource(NextState(GameState::Playing));
-    }
-}
+
 
 fn outside_backgrounds(
     mut egui_context: ResMut<EguiContext>,
@@ -56,6 +51,7 @@ fn outside_backgrounds(
         .frame(my_frame)
         .resizable(false)
         .min_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
+        .max_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
         .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered_justified(|ui| {
                 ui.label(&format!("{}:{}", player_stats.current_energy, player_stats.max_energy))
@@ -67,7 +63,6 @@ fn outside_backgrounds(
         .resizable(false)
         .min_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
         .max_width((wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.))
-
         .show(egui_context.ctx_mut(), |ui| {
             let mut style = ui.style_mut();
             style.visuals.override_text_color = Some(Color32::from_rgb(255, 255, 255));

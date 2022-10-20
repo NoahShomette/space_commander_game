@@ -28,7 +28,7 @@ impl Plugin for PlayerMissilePlugin {
             ConditionSet::new()
                 .run_in_state(GameState::Playing)
                 .label("missile_post")
-                .after("missile_main")
+                .before("missile_main")
                 .with_system(missile_explode)
                 .with_system(handle_missile_collisions)
                 .into(),
@@ -89,7 +89,6 @@ pub struct PlayerMissileBundle {
     pub(crate) sprite_bundle: SpriteBundle,
     velocity: Velocity,
     rigidbody: RigidBody,
-    collider: Collider,
     ccd: Ccd,
     gravity_scale: GravityScale,
     active_events: ActiveEvents,
@@ -159,7 +158,6 @@ impl PlayerMissileBundle {
                 angvel: 0.0,
             },
             rigidbody: RigidBody::Dynamic,
-            collider: Collider::ball(1.),
             gravity_scale: GravityScale(0.),
             active_events: ActiveEvents::COLLISION_EVENTS,
             colliding_entities: Default::default(),
@@ -220,15 +218,16 @@ pub(crate) fn update_missiles(
 pub(crate) fn missile_explode(
     sprites: Res<AssetHolder>,
     mut missile_query: Query<
-        (&mut Handle<Image>, &mut Collider, &PlayerMissile, &mut Velocity),
+        (Entity, &mut Handle<Image>, &PlayerMissile, &mut Velocity),
         Changed<PlayerMissile>,
     >,
+    mut commands: Commands,
 ) {
-    for (mut sprite, mut collider, player_missile, mut velocity) in missile_query.iter_mut() {
+    for (entity, mut sprite, player_missile, mut velocity) in missile_query.iter_mut() {
         if player_missile.reached_target {
             velocity.linvel = Vec2::ZERO;
             *sprite = sprites.player_missile_explosion.clone();
-            *collider = Collider::ball(8.);
+            commands.entity(entity).insert(Collider::ball(8.));
         }
     }
 }

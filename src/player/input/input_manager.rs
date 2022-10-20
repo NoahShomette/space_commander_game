@@ -18,6 +18,7 @@ pub(crate) enum PlayerInputEvents {
 impl Plugin for PlayerInputPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<PlayerInputEvents>()
+
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(GameState::Playing)
@@ -25,6 +26,19 @@ impl Plugin for PlayerInputPlugin {
                     .with_system(player_input)
                     .into(),
             );
+
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(GameState::MainMenu)
+                .with_system(if_start_game)
+                .into()
+        );
+    }
+}
+
+pub fn if_start_game(keyboard_input: Res<Input<KeyCode>>, mut commands: Commands) {
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        commands.insert_resource(NextState(GameState::Playing));
     }
 }
 
