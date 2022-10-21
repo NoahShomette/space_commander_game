@@ -1,4 +1,4 @@
-﻿mod input;
+﻿pub(crate) mod input;
 mod player_missiles;
 mod scanner;
 mod shield;
@@ -68,7 +68,7 @@ impl FromWorld for PlayerStats {
             max_energy: 6,
             current_energy: 6,
             energy_recharge_rate: 2.0,
-            time_till_next_energy: 2.0,
+            time_till_next_energy: 0.,
             energy_per_recharge: 1,
 
             missile_speed: 200.,
@@ -173,9 +173,9 @@ impl PlayerBundle {
 
 pub fn handle_player_energy_recharge(mut player_stats: ResMut<PlayerStats>, time: Res<Time>) {
     if player_stats.current_energy < player_stats.max_energy && player_stats.is_regaining_energy {
-        player_stats.time_till_next_energy -= time.delta_seconds();
-        if player_stats.time_till_next_energy <= 0. {
-            player_stats.time_till_next_energy = player_stats.energy_recharge_rate;
+        player_stats.time_till_next_energy += time.delta_seconds();
+        if player_stats.time_till_next_energy >= player_stats.energy_recharge_rate {
+            player_stats.time_till_next_energy = 0.;
             player_stats.recharge_energy();
             info!("{}", player_stats.current_energy)
         }

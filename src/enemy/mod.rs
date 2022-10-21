@@ -1,5 +1,5 @@
-mod enemy_difficulty;
-mod enemy_spawner;
+pub mod enemy_difficulty;
+pub mod enemy_spawner;
 
 use crate::enemy::enemy_difficulty::EnemyStats;
 use crate::enemy::enemy_spawner::EnemySpawnerPlugin;
@@ -24,6 +24,7 @@ impl Plugin for EnemyPlugin {
                 .with_system(handle_enemy_collision_changes)
                 .with_system(handle_enemy_scanned)
                 .with_system(handle_visibility_timers)
+                .with_system(update_enemy_count)
                 .into(),
         );
     }
@@ -200,4 +201,15 @@ pub(crate) fn handle_visibility_timers(
             commands.entity(entity).remove::<VisibilityTimer>();
         }
     }
+}
+
+pub(crate) fn update_enemy_count(
+    mut scanned_enemies: Query<Entity, With<Enemy>>,
+    mut enemy_stats: ResMut<EnemyStats>,
+) {
+    let mut enemy_count = 0;
+    for enemy in scanned_enemies.iter_mut() {
+        enemy_count += 1;
+    }
+    enemy_stats.current_enemy_amount = enemy_count;
 }

@@ -54,8 +54,10 @@ fn main() {
         .add_plugin(EnemyPlugin)
         //
         //temp testing plugins
-        .add_system(close_on_esc)
+        //.add_system(close_on_esc)
         //
+        .add_enter_system(GameState::Playing, turn_on_physics)
+        .add_exit_system(GameState::Playing, turn_off_physics)
         .run();
 }
 
@@ -91,6 +93,9 @@ struct AssetHolder {
 
     #[asset(path = "warning_sprite.png")]
     pub warning: Handle<Image>,
+
+    #[asset(path = "OpenSans-ExtraBold.ttf")]
+    pub font: Handle<Font>,
     /*
     #[asset(path = "music.ogg")]
     pub music: Handle<bevy_kira_audio::prelude::AudioSource>,
@@ -98,8 +103,7 @@ struct AssetHolder {
     pub victory: Handle<bevy_kira_audio::prelude::AudioSource>,
     #[asset(path = "death.ogg")]
     pub death: Handle<bevy_kira_audio::prelude::AudioSource>,
-    #[asset(path = "Carnevalee Freakshow.ttf")]
-    pub font: Handle<Font>,
+
     #[asset(path = "apophis.png")]
     pub apophis: Handle<Image>,
     #[asset(path = "background.png")]
@@ -109,4 +113,12 @@ struct AssetHolder {
 
 fn leave_game_setup_state(mut commands: Commands) {
     commands.insert_resource(NextState(GameState::MainMenu));
+}
+
+fn turn_on_physics(mut physics: ResMut<RapierConfiguration>) {
+    physics.physics_pipeline_active = true;
+}
+
+fn turn_off_physics(mut physics: ResMut<RapierConfiguration>) {
+    physics.physics_pipeline_active = false;
 }

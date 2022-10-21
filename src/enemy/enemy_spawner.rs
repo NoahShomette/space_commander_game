@@ -257,7 +257,6 @@ fn handle_visibility_timers(
         visibility_timer.visibility_timer.tick(time.delta());
         if visibility_timer.visibility_timer.finished() {
             *visibility = Visibility { is_visible: false };
-            //commands.entity(entity).remove::<VisibilityTimer>();
         }
     }
 }

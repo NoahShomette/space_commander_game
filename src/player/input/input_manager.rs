@@ -1,8 +1,9 @@
-﻿use bevy::input::keyboard::KeyboardInput;
-use crate::GameState;
+﻿use crate::GameState;
+use bevy::app::AppExit;
+use bevy::input::keyboard::KeyboardInput;
+use std::process::exit;
 
 use crate::helpers::{mouse_screen_pos_to_world_pos, mouse_virtual_play_field_check};
-use crate::player::player_missiles::player_missile_core::*;
 use bevy::prelude::*;
 use iyes_loopless::prelude::*;
 
@@ -15,23 +16,33 @@ pub(crate) enum PlayerInputEvents {
     Shield(bool),
 }
 
+#[derive(Default)]
+pub(crate) struct UpgradeMenuEvent;
+
 impl Plugin for PlayerInputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<PlayerInputEvents>()
-
-            .add_system_set(
-                ConditionSet::new()
-                    .run_in_state(GameState::Playing)
-                    .label("player_input")
-                    .with_system(player_input)
-                    .into(),
-            );
+        app.add_event::<PlayerInputEvents>();
+        app.add_event::<UpgradeMenuEvent>();
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(GameState::Playing)
+                .label("player_input")
+                .with_system(player_input)
+                .into(),
+        );
 
         app.add_system_set(
             ConditionSet::new()
                 .run_in_state(GameState::MainMenu)
                 .with_system(if_start_game)
-                .into()
+                .into(),
+        );
+
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(GameState::Pause)
+                .with_system(pause_input)
+                .into(),
         );
     }
 }
@@ -42,12 +53,30 @@ pub fn if_start_game(keyboard_input: Res<Input<KeyCode>>, mut commands: Commands
     }
 }
 
+pub(crate) fn pause_input(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut commands: Commands,
+    mut upgrade_menu_event: EventWriter<UpgradeMenuEvent>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        commands.insert_resource(NextState(GameState::Playing));
+    }
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        commands.insert_resource(NextState(GameState::Playing));
+    }
+    if keyboard_input.just_pressed(KeyCode::Tab) {
+        commands.insert_resource(NextState(GameState::Playing));
+    }
+}
+
 pub(crate) fn player_input(
     mouse_input: Res<Input<MouseButton>>,
     keyboard_input: Res<Input<KeyCode>>,
     mut input_event_writer: EventWriter<PlayerInputEvents>,
+    mut upgrade_menu_event: EventWriter<UpgradeMenuEvent>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    mut commands: Commands,
 ) {
     if mouse_input.just_pressed(MouseButton::Left) {
         if mouse_virtual_play_field_check(&windows, &camera_query) {
@@ -65,5 +94,13 @@ pub(crate) fn player_input(
     }
     if keyboard_input.just_released(KeyCode::Space) {
         input_event_writer.send(PlayerInputEvents::Shield(false));
+    }
+
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        commands.insert_resource(NextState(GameState::Pause));
+    }
+
+    if keyboard_input.just_pressed(KeyCode::Tab) {
+        commands.insert_resource(NextState(GameState::Pause));
     }
 }
