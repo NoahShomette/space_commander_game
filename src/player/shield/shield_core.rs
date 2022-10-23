@@ -58,7 +58,7 @@ fn setup_shield(mut commands: Commands) {
     commands
         .spawn_bundle(GeometryBuilder::build_as(
             &shapes::Circle {
-                radius: 30.0,
+                radius: 40.0,
                 center: Default::default(),
             },
             DrawMode::Outlined {
@@ -145,7 +145,7 @@ pub(crate) fn shield(
     mut commands: &mut Commands,
 ) {
     for (entity, mut visibility) in shield_query.iter_mut() {
-        commands.entity(entity).insert(Collider::ball(30.));
+        commands.entity(entity).insert(Collider::ball(40.));
         *visibility = Visibility { is_visible: true };
     }
 }

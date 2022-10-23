@@ -4,6 +4,7 @@ use bevy::app::AppExit;
 use std::process::exit;
 
 use crate::egui::style::Margin;
+use crate::egui::FontFamily::Name;
 use crate::input::input_manager::UpgradeMenuEvent;
 use bevy::prelude::*;
 use bevy_egui::egui::*;
@@ -20,6 +21,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_enter_system(GameState::GameSetupOnce, setup_ui);
+        //background ui systems
         app.add_system_set(
             ConditionSet::new()
                 .run_in_state(GameState::MainMenu)
@@ -41,24 +43,55 @@ impl Plugin for UiPlugin {
                     .before("main_ui")
                     .with_system(outside_backgrounds)
                     .into(),
+            )
+            .add_system_set(
+                ConditionSet::new()
+                    .run_in_state(GameState::Lose)
+                    .before("main_ui")
+                    .with_system(outside_backgrounds)
+                    .into(),
             );
         app.add_system_set(
             ConditionSet::new()
                 .run_in_state(GameState::Playing)
                 .label("main_ui")
-                .with_system(main_ui)
+                .with_system(playing_ui)
                 .into(),
         )
             .add_system_set(
                 ConditionSet::new()
                     .run_in_state(GameState::Pause)
                     .label("main_ui")
-                    .with_system(main_ui)
+                    .with_system(playing_ui)
+                    .into(),
+            )
+            .add_system_set(
+                ConditionSet::new()
+                    .run_in_state(GameState::Lose)
+                    .label("main_ui")
+                    .with_system(lose_ui)
                     .into(),
             );
+
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(GameState::MainMenu)
+                .label("main_ui")
+                .with_system(main_menu_ui)
+                .into(),
+        );
     }
 }
 
+#[inline]
+fn small_button_font() -> TextStyle {
+    TextStyle::Name("SmallButtonText".into())
+}
+
+#[inline]
+fn heading3() -> TextStyle {
+    TextStyle::Name("ContextHeading".into())
+}
 
 fn setup_ui(mut egui_context: ResMut<EguiContext>) {
     let mut fonts = FontDefinitions::default();
@@ -83,106 +116,19 @@ fn setup_ui(mut egui_context: ResMut<EguiContext>) {
         family: font_family.clone(),
     };
 
+    let small_button_font_id = FontId {
+        size: 20.0,
+        family: font_family.clone(),
+    };
+
     egui_context.ctx_mut().set_fonts(fonts);
     style.text_styles.insert(TextStyle::Body, font_id.clone());
     style.text_styles.insert(TextStyle::Button, font_id.clone());
+    style
+        .text_styles
+        .insert(small_button_font(), small_button_font_id.clone());
 
     egui_context.ctx_mut().set_style(style);
-}
-
-fn main_ui(
-    mut egui_context: ResMut<EguiContext>,
-    windows: Res<Windows>,
-    sprites: Res<AssetHolder>,
-    player_stats: Res<PlayerStats>,
-    enemy_stats: Res<EnemyStats>,
-) {
-    let wnd = windows.get_primary().unwrap();
-
-    let my_frame = Frame {
-        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 0),
-        stroke: Stroke::new(0., Color32::WHITE),
-        ..default()
-    };
-
-    egui::Window::new("PLANET")
-        .frame(my_frame)
-        .fixed_pos(pos2(0.0, 16.0))
-        .fixed_size(egui::Vec2 {
-            x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
-            y: 500.,
-        })
-        .resizable(false)
-        .collapsible(false)
-        .title_bar(false)
-        .show(egui_context.ctx_mut(), |ui| {
-            let mut style = ui.style_mut();
-            style.visuals.override_text_color = Some(Color32::from_rgb(255, 255, 255));
-            //style.visuals.widgets.ac.bg_stroke = Color32::from_rgb(76, 153, 64);
-            style.visuals.widgets.open.fg_stroke = Stroke::new(10., Color32::from_rgb(76, 153, 64));
-
-            style.visuals.widgets.open.bg_fill = Color32::from_rgb(76, 153, 64);
-
-            //style.visuals.widgets.active.bg_fill = Color32::from_rgb(76, 153, 64);
-            //style.visuals.widgets.active.bg_fill = Color32::from_rgb(76, 153, 64);
-
-            ui.vertical_centered_justified(|ui| {
-                ui.spacing_mut().item_spacing.y = 8.;
-                ui.add(ProgressBar::new(
-                    (player_stats.time_till_next_energy - 0.)
-                        / (player_stats.energy_recharge_rate as f32 - 0.),
-                ));
-                ui.label(&format!(
-                    "ENERGY: {}/{}",
-                    player_stats.current_energy, player_stats.max_energy
-                ))
-            });
-        });
-
-    egui::Window::new("GAME STATS")
-        .frame(my_frame)
-        .fixed_pos(pos2(
-            ((wnd.width() as f32 / 2.) + (wnd.height() as f32 / 2.)),
-            192. + 16.,
-        ))
-        .fixed_size(egui::Vec2 {
-            x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
-            y: 500.,
-        })
-        .resizable(false)
-        .collapsible(false)
-        .title_bar(false)
-        .show(egui_context.ctx_mut(), |ui| {
-            let mut style = ui.style_mut();
-            style.visuals.override_text_color = Some(Color32::from_rgb(255, 255, 255));
-            //style.visuals.widgets.ac.bg_stroke = Color32::from_rgb(76, 153, 64);
-            style.visuals.widgets.open.fg_stroke = Stroke::new(10., Color32::from_rgb(76, 153, 64));
-
-            style.visuals.widgets.open.bg_fill = Color32::from_rgb(76, 153, 64);
-
-            //style.visuals.widgets.active.bg_fill = Color32::from_rgb(76, 153, 64);
-            //style.visuals.widgets.active.bg_fill = Color32::from_rgb(76, 153, 64);
-            ui.vertical_centered_justified(|ui| {
-                ui.spacing_mut().item_spacing.y = 8.;
-                ui.label(&format!("SCORE: {}", player_stats.score));
-                ui.label(&format!(
-                    "ENEMIES ALIVE: {}",
-                    enemy_stats.current_enemy_amount
-                ));
-            });
-        });
-
-    let game_frame = Frame {
-        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-        stroke: Stroke::new(5., Color32::WHITE),
-        inner_margin: Margin {
-            left: 15.,
-            right: 15.,
-            top: 15.,
-            bottom: 15.,
-        },
-        ..default()
-    };
 }
 
 fn outside_backgrounds(
@@ -219,16 +165,144 @@ fn outside_backgrounds(
         });
 }
 
-fn pause_ui(
+fn main_menu_ui(
     mut egui_context: ResMut<EguiContext>,
     windows: Res<Windows>,
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
+    mut player_stats: ResMut<PlayerStats>,
+) {
+    let wnd = windows.get_primary().unwrap();
+
+    let my_frame = Frame {
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
+        stroke: Stroke::new(0., Color32::WHITE),
+        ..default()
+    };
+
+    egui::Window::new("pause_screen")
+        .frame(my_frame)
+        .anchor(
+            Align2::CENTER_BOTTOM,
+            egui::Vec2 {
+                x: 0.0,
+                y: -(wnd.height() / 2.7),
+            },
+        )
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered(|ui| {
+                ui.group(|ui| {
+                    ui.vertical_centered_justified(|ui| {
+                        ui.label(&format!("SPACE COMMANDER"));
+                        //ui.label(&format!("HIGH SCORE: {}", player_stats.locked_score));
+                    });
+                });
+                ui.spacing_mut().item_spacing.y = 32.;
+            });
+            // options below the main panel with system stuff
+            ui.columns(2, |ui| {
+                let menu_button =
+                    ui[0].add_sized([80., 26.], egui::Button::new(RichText::new("PLAY")));
+                if menu_button.clicked() {
+                    commands.insert_resource(NextState(GameState::Playing));
+                };
+                let menu_button =
+                    ui[1].add_sized([80., 26.], egui::Button::new(RichText::new("QUIT")));
+                if menu_button.clicked() {
+                    quit_game(exit);
+                };
+            });
+        });
+}
+
+fn playing_ui(
+    mut egui_context: ResMut<EguiContext>,
+    windows: Res<Windows>,
+    sprites: Res<AssetHolder>,
+    player_stats: Res<PlayerStats>,
+    enemy_stats: Res<EnemyStats>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
     let my_frame = Frame {
         fill: Color32::from_rgba_unmultiplied(0, 0, 0, 0),
+        stroke: Stroke::new(0., Color32::WHITE),
+        ..default()
+    };
+
+    //left side
+    egui::Window::new("PLANET")
+        .frame(my_frame)
+        .anchor(
+            Align2::LEFT_CENTER,
+            vec2(-(wnd.height() as f32 / 2.57), 0.),
+        )
+        //.fixed_pos(pos2(0.0, 16.0))
+        .fixed_size(egui::Vec2 {
+            x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
+            y: 500.,
+        })
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.;
+                ui.add(
+                    ProgressBar::new(
+                        (player_stats.time_till_next_energy - 0.)
+                            / (player_stats.energy_recharge_rate.0 - 0.),
+                    )
+                        .text(&format!("   +{}", player_stats.energy_per_recharge)),
+                );
+                ui.label(&format!(
+                    "ENERGY: {}/{}",
+                    player_stats.current_energy, player_stats.max_energy
+                ))
+            });
+        });
+
+    //right side
+    egui::Window::new("GAME STATS")
+        .frame(my_frame)
+        .anchor(
+            Align2::RIGHT_CENTER,
+            vec2((wnd.height() as f32 / 2.57), 0.),
+        )
+        .fixed_size(egui::Vec2 {
+            x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
+            y: 500.,
+        })
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.;
+                ui.label(&format!("SCORE: {}", player_stats.locked_score));
+                ui.label(&format!("POINTS: {}", player_stats.score));
+                ui.label(&format!(
+                    "ENEMIES ALIVE: {}",
+                    enemy_stats.current_enemy_amount
+                ));
+            });
+        });
+}
+
+fn pause_ui(
+    mut egui_context: ResMut<EguiContext>,
+    windows: Res<Windows>,
+    mut exit: EventWriter<AppExit>,
+    mut commands: Commands,
+    mut player_stats: ResMut<PlayerStats>,
+) {
+    let wnd = windows.get_primary().unwrap();
+
+    let my_frame = Frame {
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
         stroke: Stroke::new(0., Color32::WHITE),
         ..default()
     };
@@ -254,31 +328,268 @@ fn pause_ui(
         .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.group(|ui| {
-                    ui.vertical_centered_justified(|ui| {
-                        ui.label(&format!("PAUSED"));
+                    ui.label(&format!("PAUSED"));
+                });
+                ui.group(|ui| {
+                    ui.columns(3, |ui| {
+                        ui[0].set_max_height(40.);
+                        ui[0].horizontal_centered(|ui| {
+                            ui.label(&format!("POINTS: {}", player_stats.score));
+                        });
+                        ui[1].set_max_height(40.);
+                        ui[1].horizontal_centered(|ui| {
+                            ui.label(&format!("SCORE: {}", player_stats.locked_score));
+                        });
+                        ui[2].set_max_height(40.);
+                        ui[2].horizontal_centered(|ui| {
+                            //MAX ENERGY
+                            let button = ui.group(|ui| {
+                                ui.set_min_width(100.);
+                                ui.label(
+                                    RichText::new("LOCK POINTS").text_style(small_button_font()),
+                                );
+                            });
+                            let max_energy_button = button.response.interact(Sense::click());
+                            let max_energy_button = max_energy_button.on_hover_text(
+                                RichText::new("Convert all points into locked score")
+                                    .text_style(small_button_font()),
+                            );
+                            if max_energy_button.clicked() {
+                                player_stats.lock_remaining_score();
+                            }
+                        });
                     });
                 });
-                ui.spacing_mut().item_spacing.y = 32.;
+                //ui.spacing_mut().item_spacing.y = 32.;
 
                 ui.group(|ui| {
                     ui.vertical_centered_justified(|ui| {
-                        let mut style = ui.style_mut();
-                        ui.spacing_mut().item_spacing.y = 8.;
+                        ui.label(&format!("UPGRADE"));
+                    });
+                    //TODO get the background color for group working
 
-                        if ui.button("Resume").clicked() {
-                            commands.insert_resource(NextState(GameState::Playing));
-                        }
-                        if ui.button("Quit").clicked() {}
+                    ui.group(|ui| {
+                        ui.columns(3, |ui| {
+                            //ui.horizontal_wrapped(|ui| {
+                            ui[0].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+
+                                //MAX ENERGY
+                                let button = ui.group(|ui| {
+                                    ui.set_min_width(100.);
+                                    ui.label(
+                                        RichText::new("Max Energy").text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "+1 Max Energy | Cost: {}",
+                                        player_stats.max_energy_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_max_energy();
+                                }
+                            });
+
+                            //ENERGY RECHARGE
+                            ui[0].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(
+                                        RichText::new("Energy Recharge")
+                                            .text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "+1 Energy per {} Seconds | Cost: {}",
+                                        player_stats.energy_recharge_rate.0,
+                                        player_stats.energy_recharge_rate_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_energy_charge();
+                                }
+                            });
+
+                            //MAX HEALTH
+                            ui[1].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(
+                                        RichText::new("Max Health").text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "+1 Max Health | Cost: {}",
+                                        player_stats.max_health_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_max_health();
+                                }
+                            });
+
+                            //HEAL
+                            ui[1].vertical_centered(|ui| {
+                                ui.set_max_height(20.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(RichText::new("Heal").text_style(small_button_font()));
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Heals 1 Health | Cost: {}",
+                                        player_stats.current_health_increase_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.plus_current_health();
+                                }
+                            });
+
+                            //SCANS
+                            ui[2].vertical_centered(|ui| {
+                                ui.set_max_height(20.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(
+                                        RichText::new("Faster Scans")
+                                            .text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Increases scan speed by {} | Cost: {}",
+                                        player_stats.scan_speed.2, player_stats.scan_speed_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_scan_speed();
+                                }
+                            });
+                            ui[2].vertical_centered(|ui| {
+                                ui.set_max_height(20.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(
+                                        RichText::new("Shield Time").text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Increases shield time by {} | Cost: {}",
+                                        1, player_stats.shield_time_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.plus_current_health();
+                                }
+                            });
+                        });
                     });
                 });
-                ui.columns(2, |ui| {
-                    if ui[0].button("Resume").clicked() {
+
+                // options below the main panel with system stuff
+                ui.columns(3, |ui| {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("RESUME").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
                         commands.insert_resource(NextState(GameState::Playing));
-                    }
-                    if ui[1].button("Quit").clicked() {
+                    };
+
+                    let menu_button = ui[1].add_sized(
+                        [80., 26.],
+                        egui::Button::new(
+                            RichText::new("MAIN MENU").text_style(small_button_font()),
+                        ),
+                    );
+                    if menu_button.clicked() {
+                        commands.insert_resource(NextState(GameState::MainMenu));
+                    };
+
+                    let menu_button = ui[2].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("QUIT").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
                         quit_game(exit);
-                    }
+                    };
                 });
+            });
+        });
+}
+
+fn lose_ui(
+    mut egui_context: ResMut<EguiContext>,
+    windows: Res<Windows>,
+    mut exit: EventWriter<AppExit>,
+    mut commands: Commands,
+    mut player_stats: ResMut<PlayerStats>,
+) {
+    let wnd = windows.get_primary().unwrap();
+
+    let my_frame = Frame {
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
+        stroke: Stroke::new(0., Color32::WHITE),
+        ..default()
+    };
+
+    egui::Window::new("pause_screen")
+        .frame(my_frame)
+        .anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered(|ui| {
+                ui.group(|ui| {
+                    ui.vertical_centered_justified(|ui| {
+                        ui.label(&format!("GAME OVER"));
+                        ui.label(&format!("FINAL SCORE: {}", player_stats.locked_score));
+                    });
+                });
+                ui.spacing_mut().item_spacing.y = 32.;
+            });
+            // options below the main panel with system stuff
+            ui.columns(2, |ui| {
+                let menu_button = ui[0].add_sized(
+                    [80., 26.],
+                    egui::Button::new(RichText::new("RESTART").text_style(small_button_font())),
+                );
+                if menu_button.clicked() {
+                    commands.insert_resource(NextState(GameState::MainMenu));
+                };
+                let menu_button = ui[1].add_sized(
+                    [80., 26.],
+                    egui::Button::new(RichText::new("QUIT").text_style(small_button_font())),
+                );
+                if menu_button.clicked() {
+                    quit_game(exit);
+                };
             });
         });
 }

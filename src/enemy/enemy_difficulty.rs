@@ -10,8 +10,8 @@ pub(crate) struct EnemyStats {
     pub(crate) current_enemy_amount: u32,
 }
 
-impl FromWorld for EnemyStats {
-    fn from_world(_world: &mut World) -> Self {
+impl Default for EnemyStats {
+    fn default() -> Self {
         EnemyStats {
             speed: 50.0,
             amount_to_spawn_a_wave: 1,

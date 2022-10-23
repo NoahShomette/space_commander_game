@@ -3,7 +3,7 @@ pub mod enemy_spawner;
 
 use crate::enemy::enemy_difficulty::EnemyStats;
 use crate::enemy::enemy_spawner::EnemySpawnerPlugin;
-use crate::{AssetHolder, GameState};
+use crate::{AssetHolder, GameState, PlayerStats, RestartGameEvent, ScoreEvent};
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
@@ -18,12 +18,24 @@ impl Plugin for EnemyPlugin {
 
         app.add_system_set(
             ConditionSet::new()
+                .with_system(handle_restart_game_events.run_on_event::<RestartGameEvent>())
+                .into(),
+        );
+
+        app.add_system_set(
+            ConditionSet::new()
                 .run_in_state(GameState::Playing)
                 .label("main_enemy_loop")
                 .after("missile_post")
-                .with_system(handle_enemy_collision_changes)
                 .with_system(handle_enemy_scanned)
                 .with_system(handle_visibility_timers)
+                .into(),
+        );
+        app.add_system_set(
+            ConditionSet::new()
+                .run_in_state(GameState::Playing)
+                .after("main_enemy_loop")
+                .with_system(handle_enemy_collision_changes)
                 .with_system(update_enemy_count)
                 .into(),
         );
@@ -58,7 +70,10 @@ impl Enemy {
             z: 0.0,
         };
         let ghost_entity = commands
-            .spawn_bundle(GhostEnemyBundle::new(&sprites, spawn_location_local.clone()))
+            .spawn_bundle(GhostEnemyBundle::new(
+                &sprites,
+                spawn_location_local.clone(),
+            ))
             .id();
         commands.spawn_bundle(EnemyBundle::new(
             &sprites,
@@ -138,7 +153,15 @@ impl EnemyBundle {
 pub struct GhostEnemyBundle {
     #[bundle]
     pub(crate) sprite_bundle: SpriteBundle,
+    pub(crate) ghost: Ghost,
+    pub(crate) collider: Collider,
+    rigidbody: RigidBody,
+    gravity_scale: GravityScale,
+    sensor: Sensor,
 }
+
+#[derive(Component)]
+pub struct Ghost(bool);
 
 impl GhostEnemyBundle {
     pub(crate) fn new(sprites: &Res<AssetHolder>, scanned_location: Vec2) -> GhostEnemyBundle {
@@ -157,34 +180,69 @@ impl GhostEnemyBundle {
                 texture: sprites.enemy_ghost.clone(),
                 ..default()
             },
+            ghost: Ghost(false),
+            collider: Collider::ball(5.),
+            rigidbody: RigidBody::Dynamic,
+            gravity_scale: GravityScale(0.),
+            sensor: Sensor,
         }
     }
 }
 
 pub(crate) fn handle_enemy_collision_changes(
     mut destroyed_enemies: Query<(Entity, &Enemy), With<Destroyed>>,
+    mut ghost_query: Query<&mut Ghost>,
     mut commands: Commands,
+    mut score_event_writer: EventWriter<ScoreEvent>,
+    player_stats: Res<PlayerStats>,
 ) {
     for (destroyed_enemy, enemy) in destroyed_enemies.iter_mut() {
-        commands.entity(enemy.scan_ghost).despawn();
+        if let Ok(mut ghost) = ghost_query.get_mut(enemy.scan_ghost) {
+            ghost.0 = true;
+        }
         commands.entity(destroyed_enemy).despawn();
+        score_event_writer.send(ScoreEvent(player_stats.enemy_kill_score));
     }
 }
 
 pub(crate) fn handle_enemy_scanned(
-    mut scanned_enemies: Query<(Entity, &Enemy, &Transform, &mut Visibility), With<Scanned>>,
+    mut scanned_enemies: Query<
+        (
+            Entity,
+            Option<&Enemy>,
+            Option<&Ghost>,
+            &Transform,
+            &mut Visibility,
+        ),
+        With<Scanned>,
+    >,
     mut ghost_query: Query<&mut Transform, Without<Scanned>>,
     mut commands: Commands,
 ) {
-    for (scanned_enemy, enemy, transform, mut visibility) in scanned_enemies.iter_mut() {
-        if let Ok(mut ghost_transform) = ghost_query.get_mut(enemy.scan_ghost) {
-            ghost_transform.translation = transform.translation;
+    for (scanned_enemy, enemy_option, ghost_option, transform, mut visibility) in
+    scanned_enemies.iter_mut()
+    {
+        //handles
+        if enemy_option.is_some() {
+            let enemy = enemy_option.unwrap();
+            if let Ok(mut ghost_transform) = ghost_query.get_mut(enemy.scan_ghost) {
+                ghost_transform.translation = transform.translation;
+            }
+            *visibility = Visibility { is_visible: true };
+            commands.entity(scanned_enemy).insert(VisibilityTimer {
+                visibility_timer: Timer::new(Duration::from_secs_f32(0.5), false),
+            });
+            commands.entity(scanned_enemy).remove::<Scanned>();
         }
-        *visibility = Visibility { is_visible: true };
-        commands.entity(scanned_enemy).insert(VisibilityTimer {
-            visibility_timer: Timer::new(Duration::from_secs_f32(0.5), false),
-        });
-        commands.entity(scanned_enemy).remove::<Scanned>();
+
+        if ghost_option.is_some() {
+            let ghost = ghost_option.unwrap();
+            if ghost.0 == true {
+                commands.entity(scanned_enemy).despawn();
+            } else {
+                commands.entity(scanned_enemy).remove::<Scanned>();
+            }
+        }
     }
 }
 
@@ -204,12 +262,26 @@ pub(crate) fn handle_visibility_timers(
 }
 
 pub(crate) fn update_enemy_count(
-    mut scanned_enemies: Query<Entity, With<Enemy>>,
+    mut enemies: Query<Entity, With<Enemy>>,
     mut enemy_stats: ResMut<EnemyStats>,
 ) {
     let mut enemy_count = 0;
-    for enemy in scanned_enemies.iter_mut() {
+    for enemy in enemies.iter_mut() {
         enemy_count += 1;
     }
     enemy_stats.current_enemy_amount = enemy_count;
+}
+
+fn handle_restart_game_events(
+    mut commands: Commands,
+    mut enemies: Query<Entity, With<Enemy>>,
+    mut ghosts: Query<Entity, With<Ghost>>,
+) {
+    for enemy in enemies.iter_mut() {
+        commands.entity(enemy).despawn();
+    }
+    for enemy in ghosts.iter_mut() {
+        commands.entity(enemy).despawn();
+    }
+    commands.insert_resource(EnemyStats::default());
 }

@@ -3,10 +3,13 @@ mod player;
 mod helpers;
 mod ui;
 mod enemy;
+mod sound;
 
 use crate::game_systems::*;
 use crate::player::*;
 use crate::ui::*;
+use crate::enemy::EnemyPlugin;
+use crate::sound::SoundPlugin;
 
 use bevy::prelude::*;
 use iyes_loopless::prelude::*;
@@ -15,7 +18,7 @@ use bevy::render::texture::ImageSettings;
 use bevy::window::{close_on_esc, WindowMode};
 use bevy_egui::*;
 use bevy_rapier2d::prelude::*;
-use crate::enemy::EnemyPlugin;
+
 
 
 fn main() {
@@ -28,6 +31,8 @@ fn main() {
         )
 
         .add_enter_system(GameState::GameSetupOnce, leave_game_setup_state)
+        .add_enter_system(GameState::MainMenu, send_restart_game_event)
+        .add_event::<RestartGameEvent>()
         //default resources needed
         .insert_resource(ClearColor(Color::rgba(0.05, 0.05, 0.1, 1.0)))
         .insert_resource(ImageSettings::default_nearest())
@@ -45,13 +50,14 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(16.0))
         .add_plugin(EguiPlugin)
-        //.add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(RapierDebugRenderPlugin::default())
         //
         //game base plugins
         .add_plugin(GameSystems)
         .add_plugin(PlayerPlugin)
         .add_plugin(UiPlugin)
         .add_plugin(EnemyPlugin)
+        .add_plugin(SoundPlugin)
         //
         //temp testing plugins
         //.add_system(close_on_esc)
@@ -61,6 +67,8 @@ fn main() {
         .run();
 }
 
+pub(crate) struct RestartGameEvent;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
     AssetLoading,
@@ -68,6 +76,7 @@ enum GameState {
     MainMenu,
     Tutorial,
     Playing,
+    Lose,
     Pause,
 }
 
@@ -121,4 +130,8 @@ fn turn_on_physics(mut physics: ResMut<RapierConfiguration>) {
 
 fn turn_off_physics(mut physics: ResMut<RapierConfiguration>) {
     physics.physics_pipeline_active = false;
+}
+
+fn send_restart_game_event(mut event_writer: EventWriter<RestartGameEvent>) {
+    event_writer.send(RestartGameEvent);
 }

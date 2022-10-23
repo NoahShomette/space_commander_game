@@ -11,6 +11,7 @@ pub struct PlayerMissilePlugin;
 impl Plugin for PlayerMissilePlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_event::<EnemyKilledEvent>()
             //handles spawning missiles events and updating missiles/checking if they have arrived
             .add_system_set(
                 ConditionSet::new()
@@ -23,6 +24,12 @@ impl Plugin for PlayerMissilePlugin {
                     .with_system(update_missiles)
                     .into(),
             );
+
+        app.add_system_set(
+            ConditionSet::new()
+                .with_system(handle_restart_game_events.run_on_event::<RestartGameEvent>())
+                .into()
+        );
         //handles missiles exploding
         app.add_system_set(
             ConditionSet::new()
@@ -35,6 +42,9 @@ impl Plugin for PlayerMissilePlugin {
         );
     }
 }
+
+#[derive(Default)]
+pub struct EnemyKilledEvent;
 
 #[derive(Default)]
 pub struct SpawnMissileEvent {
@@ -65,7 +75,7 @@ impl PlayerMissile {
             let missile_rotation = Quat::from_rotation_z(angle);
             let rotated_velocity = missile_rotation
                 * Vec3 {
-                x: player_stats.missile_speed,
+                x: player_stats.missile_speed.0,
                 y: 0.0,
                 z: 0.0,
             };
@@ -236,13 +246,22 @@ pub(crate) fn handle_missile_collisions(
     mut missiles: Query<(&CollidingEntities, &mut PlayerMissile), With<PlayerMissile>>,
     mut enemy_entities: Query<&Enemy>,
     mut commands: Commands,
+    mut enemy_killed_event_writer: EventWriter<EnemyKilledEvent>,
 ) {
     for (entities, mut missiles) in missiles.iter_mut() {
         for collision in entities.iter() {
             if let Ok(_enemy) = enemy_entities.get(collision) {
                 missiles.reached_target = true;
                 commands.entity(collision).insert(Destroyed);
+                enemy_killed_event_writer.send(EnemyKilledEvent);
             }
         }
+    }
+}
+
+fn handle_restart_game_events(mut commands: Commands, mut missiles: Query<(Entity, &PlayerMissile)>) {
+    for (missile, player_missile) in missiles.iter_mut() {
+        commands.entity(player_missile.target_entity).despawn();
+        commands.entity(missile).despawn();
     }
 }

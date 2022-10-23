@@ -21,8 +21,8 @@ impl Plugin for EnemySpawnerPlugin {
         );
         app.init_resource::<SpawnRes>()
             .add_event::<NewSpawnEvent>()
-            .add_enter_system(GameState::MainMenu, setup_spawn_res)
-            .add_enter_system(GameState::Playing, setup_warning_sprites);
+            .add_enter_system(GameState::GameSetupOnce, setup_spawn_res)
+            .add_exit_system(GameState::GameSetupOnce, setup_warning_sprites);
         app.add_stage_before(
             CoreStage::Update,
             "FixedUpdate",
@@ -43,7 +43,7 @@ impl Plugin for EnemySpawnerPlugin {
 
 // we need to get the window height and then use that to calculate how far left, right, top, and down are the out of bounds zones
 //using that we can then have a function that returns a new random spawn spot based on that info in the resource
-#[derive(Component, Copy, Clone, PartialEq, Eq)]
+#[derive(Component, Copy, Clone, PartialEq, Eq, Debug)]
 enum SpawnSide {
     Left,
     Top,
@@ -79,6 +79,44 @@ impl SpawnSide {
             }
         }
         commands.spawn_bundle(WarningBundle::new(sprites, new_spawn_location, spawn_side));
+    }
+}
+
+#[derive(Component)]
+struct Warning;
+
+#[derive(Bundle)]
+pub struct WarningBundle {
+    #[bundle]
+    pub(crate) sprite_bundle: SpriteBundle,
+    spawn_side: SpawnSide,
+    warning: Warning,
+    visibility_timer: VisibilityTimer,
+}
+
+impl WarningBundle {
+    fn new(sprites: &Res<AssetHolder>, location: Vec2, spawn_side: SpawnSide) -> WarningBundle {
+        WarningBundle {
+            sprite_bundle: SpriteBundle {
+                sprite: Default::default(),
+                transform: Transform {
+                    translation: location.extend(0.0),
+                    scale: Vec3 {
+                        x: 3.0,
+                        y: 3.0,
+                        z: 1.0,
+                    },
+                    ..default()
+                },
+                texture: sprites.warning.clone(),
+                ..default()
+            },
+            spawn_side,
+            warning: Warning,
+            visibility_timer: VisibilityTimer {
+                visibility_timer: Timer::new(Duration::from_secs_f32(0.5), false),
+            },
+        }
     }
 }
 
@@ -159,43 +197,7 @@ impl SpawnRes {
     }
 }
 
-#[derive(Component)]
-struct Warning;
 
-#[derive(Bundle)]
-pub struct WarningBundle {
-    #[bundle]
-    pub(crate) sprite_bundle: SpriteBundle,
-    spawn_side: SpawnSide,
-    warning: Warning,
-    visibility_timer: VisibilityTimer,
-}
-
-impl WarningBundle {
-    fn new(sprites: &Res<AssetHolder>, location: Vec2, spawn_side: SpawnSide) -> WarningBundle {
-        WarningBundle {
-            sprite_bundle: SpriteBundle {
-                sprite: Default::default(),
-                transform: Transform {
-                    translation: location.extend(0.0),
-                    scale: Vec3 {
-                        x: 3.0,
-                        y: 3.0,
-                        z: 1.0,
-                    },
-                    ..default()
-                },
-                texture: sprites.warning.clone(),
-                ..default()
-            },
-            spawn_side,
-            warning: Warning,
-            visibility_timer: VisibilityTimer {
-                visibility_timer: Timer::new(Duration::from_secs_f32(0.5), false),
-            },
-        }
-    }
-}
 
 fn setup_spawn_res(mut spawn_res: ResMut<SpawnRes>, windows: Res<Windows>) {
     let wnd = windows.get_primary().unwrap();
@@ -241,8 +243,11 @@ fn handle_spawn_events(
     for event in spawn_event_reader.iter() {
         for (entity, mut visibility_timer, mut visibility, spawn_side) in timed_enemies.iter_mut() {
             if *spawn_side == event.0 {
+                info!("EVENT: {:?}", event.0);
+                info!("ENTITY: {:?}", spawn_side);
+
                 *visibility = Visibility { is_visible: true };
-                visibility_timer.visibility_timer.reset();    //: Timer::new(Duration::from_secs_f32(0.5), false);
+                visibility_timer.visibility_timer.reset();
             }
         }
     }
