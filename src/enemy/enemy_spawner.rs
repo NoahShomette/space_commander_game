@@ -1,11 +1,12 @@
 ﻿use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
 use rand::prelude::*;
 use std::time::Duration;
+use iyes_loopless::fixedtimestep::*;
 
 use crate::enemy::enemy_difficulty::EnemyStats;
-use crate::enemy::{Enemy, GhostEnemyBundle, handle_enemy_collision_changes, handle_enemy_scanned, VisibilityTimer};
+use crate::enemy::{Enemy, VisibilityTimer,
+};
 use crate::{AssetHolder, GameState};
 
 pub(crate) struct EnemySpawnerPlugin;
@@ -16,6 +17,11 @@ impl Plugin for EnemySpawnerPlugin {
 
         fixed_update.add_system(
             spawn_next_wave
+                // only do it in-game
+                .run_in_state(GameState::Playing),
+        );
+        fixed_update.add_system(
+            update_timestep
                 // only do it in-game
                 .run_in_state(GameState::Playing),
         );
@@ -131,8 +137,8 @@ struct SpawnRes {
     space: f32,
 }
 
-impl FromWorld for SpawnRes {
-    fn from_world(_world: &mut World) -> Self {
+impl Default for SpawnRes {
+    fn default() -> Self {
         SpawnRes {
             left: 0.0,
             top: 0.0,
@@ -153,7 +159,6 @@ impl SpawnRes {
         match random {
             1 => {
                 // left
-                info!("LEFT");
                 let range = rng.gen_range(self.bottom..self.top);
                 new_spawn_location = Vec2 {
                     x: self.left - 50.,
@@ -163,7 +168,6 @@ impl SpawnRes {
             }
             2 => {
                 // top
-                info!("TOP");
                 let range = rng.gen_range(self.left..self.right);
                 new_spawn_location = Vec2 {
                     x: range,
@@ -173,7 +177,6 @@ impl SpawnRes {
             }
             3 => {
                 // right
-                info!("RIGHT");
                 let range = rng.gen_range(self.bottom..self.top);
                 new_spawn_location = Vec2 {
                     x: self.right + 50.,
@@ -183,7 +186,6 @@ impl SpawnRes {
             }
             _ => {
                 // bottom and all else
-                info!("BOTTOM");
                 let range = rng.gen_range(self.left..self.right);
                 new_spawn_location = Vec2 {
                     x: range,
@@ -196,8 +198,6 @@ impl SpawnRes {
         (new_spawn_location, spawn_side)
     }
 }
-
-
 
 fn setup_spawn_res(mut spawn_res: ResMut<SpawnRes>, windows: Res<Windows>) {
     let wnd = windows.get_primary().unwrap();
@@ -219,10 +219,20 @@ fn setup_warning_sprites(
     SpawnSide::spawn_warning_object(&SpawnSide::Bottom, &sprites, &spawn_res, &mut commands);
 }
 
+
+fn update_timestep(mut timesteps: ResMut<FixedTimestepInfo>) {
+    // we can access our timestep by name
+    //let info = timesteps.get_mut("my_fixed_update").unwrap();
+    // set a different duration
+    timesteps.step = Duration::from_millis(125);
+    // pause it
+    //info.paused = true;
+}
+
 fn spawn_next_wave(
     sprites: Res<AssetHolder>,
     spawn_res: Res<SpawnRes>,
-    enemy_stats: Res<EnemyStats>,
+    mut enemy_stats: ResMut<EnemyStats>,
     mut commands: Commands,
     mut spawn_event_writer: EventWriter<NewSpawnEvent>,
 ) {
@@ -230,6 +240,7 @@ fn spawn_next_wave(
         let (new_spawn_point, spawn_side) = &spawn_res.new_spawn_point();
         Enemy::spawn(&sprites, &enemy_stats, &mut commands, new_spawn_point);
         spawn_event_writer.send(NewSpawnEvent(*spawn_side));
+        enemy_stats.all_time_enemy_count += 1;
     }
 }
 
@@ -243,9 +254,6 @@ fn handle_spawn_events(
     for event in spawn_event_reader.iter() {
         for (entity, mut visibility_timer, mut visibility, spawn_side) in timed_enemies.iter_mut() {
             if *spawn_side == event.0 {
-                info!("EVENT: {:?}", event.0);
-                info!("ENTITY: {:?}", spawn_side);
-
                 *visibility = Visibility { is_visible: true };
                 visibility_timer.visibility_timer.reset();
             }

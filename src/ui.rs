@@ -12,6 +12,7 @@ use bevy_egui::*;
 use bevy_rapier2d::na::DimAdd;
 use egui::{FontFamily, FontId, RichText, TextStyle};
 use iyes_loopless::prelude::*;
+use crate::sound::SoundEffects;
 
 pub struct UiPlugin;
 
@@ -171,6 +172,7 @@ fn main_menu_ui(
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
     mut player_stats: ResMut<PlayerStats>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
@@ -208,10 +210,12 @@ fn main_menu_ui(
                     ui[0].add_sized([80., 26.], egui::Button::new(RichText::new("PLAY")));
                 if menu_button.clicked() {
                     commands.insert_resource(NextState(GameState::Playing));
+                    sound_effect_writer.send(SoundEffects::NormalButton);
                 };
                 let menu_button =
                     ui[1].add_sized([80., 26.], egui::Button::new(RichText::new("QUIT")));
                 if menu_button.clicked() {
+                    sound_effect_writer.send(SoundEffects::NormalButton);
                     quit_game(exit);
                 };
             });
@@ -224,8 +228,13 @@ fn playing_ui(
     sprites: Res<AssetHolder>,
     player_stats: Res<PlayerStats>,
     enemy_stats: Res<EnemyStats>,
+    mut commands: Commands,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     let wnd = windows.get_primary().unwrap();
+
+    let health = egui_context.add_image(sprites.health.clone_weak());
+    let health_empty = egui_context.add_image(sprites.health_empty.clone_weak());
 
     let my_frame = Frame {
         fill: Color32::from_rgba_unmultiplied(0, 0, 0, 0),
@@ -236,10 +245,7 @@ fn playing_ui(
     //left side
     egui::Window::new("PLANET")
         .frame(my_frame)
-        .anchor(
-            Align2::LEFT_CENTER,
-            vec2(-(wnd.height() as f32 / 2.57), 0.),
-        )
+        .anchor(Align2::LEFT_CENTER, vec2(-(wnd.height() as f32 / 2.57), 0.))
         //.fixed_pos(pos2(0.0, 16.0))
         .fixed_size(egui::Vec2 {
             x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
@@ -249,29 +255,54 @@ fn playing_ui(
         .collapsible(false)
         .title_bar(false)
         .show(egui_context.ctx_mut(), |ui| {
+            if ui.button(RichText::new("PAUSE").text_style(small_button_font())).clicked() {
+                commands.insert_resource(NextState(GameState::Pause));
+                sound_effect_writer.send(SoundEffects::NormalButton);
+            }
+            ui.vertical_centered(|ui| {
+                let menu_button = ui.add_sized(
+                    [80., 26.],
+                    egui::Button::new(RichText::new("PAUSE").text_style(small_button_font())),
+                );
+                if menu_button.clicked() {
+                    commands.insert_resource(NextState(GameState::Pause));
+                };
+            });
             ui.vertical_centered_justified(|ui| {
                 ui.spacing_mut().item_spacing.y = 8.;
-                ui.add(
-                    ProgressBar::new(
-                        (player_stats.time_till_next_energy - 0.)
-                            / (player_stats.energy_recharge_rate.0 - 0.),
-                    )
-                        .text(&format!("   +{}", player_stats.energy_per_recharge)),
-                );
-                ui.label(&format!(
-                    "ENERGY: {}/{}",
-                    player_stats.current_energy, player_stats.max_energy
-                ))
+                ui.group(|ui| {
+                    ui.label("ENERGY");
+                    ui.add(
+                        ProgressBar::new(
+                            (player_stats.time_till_next_energy - 0.)
+                                / (player_stats.energy_recharge_rate.0 - 0.),
+                        )
+                            .text(&format!("   +{} Energy", player_stats.energy_per_recharge)),
+                    );
+                    ui.label(&format!(
+                        "ENERGY: {}/{}",
+                        player_stats.current_energy, player_stats.max_energy
+                    ));
+                });
+                ui.group(|ui| {
+                    ui.label("HEALTH");
+                    ui.horizontal_wrapped(|ui| {
+                        for i in 0..player_stats.max_health {
+                            if i < player_stats.current_health {
+                                ui.image(health, [(16 * 3) as f32, (16 * 3) as f32]);
+                            } else {
+                                ui.image(health_empty, [(16 * 3) as f32, (16 * 3) as f32]);
+                            }
+                        }
+                    });
+                });
             });
         });
 
     //right side
     egui::Window::new("GAME STATS")
         .frame(my_frame)
-        .anchor(
-            Align2::RIGHT_CENTER,
-            vec2((wnd.height() as f32 / 2.57), 0.),
-        )
+        .anchor(Align2::RIGHT_CENTER, vec2((wnd.height() as f32 / 2.57), 0.))
         .fixed_size(egui::Vec2 {
             x: (wnd.width() as f32 / 2.) - (wnd.height() as f32 / 2.),
             y: 500.,
@@ -298,6 +329,7 @@ fn pause_ui(
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
     mut player_stats: ResMut<PlayerStats>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
@@ -342,7 +374,7 @@ fn pause_ui(
                         });
                         ui[2].set_max_height(40.);
                         ui[2].horizontal_centered(|ui| {
-                            //MAX ENERGY
+                            //LOCK POINTS BUTTON
                             let button = ui.group(|ui| {
                                 ui.set_min_width(100.);
                                 ui.label(
@@ -463,7 +495,7 @@ fn pause_ui(
                                 }
                             });
 
-                            //SCANS
+                            //SCANS / shield / missile
                             ui[2].vertical_centered(|ui| {
                                 ui.set_max_height(20.);
                                 ui.set_min_width(100.);
@@ -478,7 +510,8 @@ fn pause_ui(
                                 let max_energy_button = max_energy_button.on_hover_text(
                                     RichText::new(format!(
                                         "Increases scan speed by {} | Cost: {}",
-                                        player_stats.scan_speed.2, player_stats.scan_speed_upgrade_cost
+                                        player_stats.scan_speed.2,
+                                        player_stats.scan_speed_upgrade_cost
                                     ))
                                         .text_style(small_button_font()),
                                 );
@@ -492,7 +525,8 @@ fn pause_ui(
 
                                 let button = ui.group(|ui| {
                                     ui.label(
-                                        RichText::new("Shield Time").text_style(small_button_font()),
+                                        RichText::new("Shield Time")
+                                            .text_style(small_button_font()),
                                     );
                                 });
                                 let max_energy_button = button.response.interact(Sense::click());
@@ -504,7 +538,153 @@ fn pause_ui(
                                         .text_style(small_button_font()),
                                 );
                                 if max_energy_button.clicked() {
-                                    player_stats.plus_current_health();
+                                    player_stats.upgrade_shield_time();
+                                }
+                            });
+                            ui[2].vertical_centered(|ui| {
+                                ui.set_max_height(20.);
+                                ui.set_min_width(100.);
+
+                                let button = ui.group(|ui| {
+                                    ui.label(
+                                        RichText::new("Missile Speed")
+                                            .text_style(small_button_font()),
+                                    );
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Increases missile speed by {} | Cost: {}",
+                                        player_stats.missile_speed.2,
+                                        player_stats.missile_speed_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_missile_speed();
+                                }
+                            });
+                        });
+                    });
+                });
+
+                ui.group(|ui| {
+                    ui.vertical_centered_justified(|ui| {
+                        ui.label(&format!("SUPER UPGRADES"));
+                    });
+                    ui.group(|ui| {
+                        ui.columns(4, |ui| {
+                            //ui.horizontal_wrapped(|ui| {
+                            ui[0].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+
+                                //CLUSTER MISSILE
+                                let button = ui.group(|ui| {
+                                    ui.set_min_width(100.);
+                                    if player_stats.is_cluster_missile_upgrade {
+                                        ui.label(
+                                            RichText::new("Cluster Missile").text_style(small_button_font()).strikethrough().color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                                        );
+                                    } else {
+                                        ui.label(
+                                            RichText::new("Cluster Missile").text_style(small_button_font()).color(Color32::from_rgba_unmultiplied(200, 0, 0, 255)),
+                                        );
+                                    }
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Fires 4 missiles in an aoe around the target point | Cost: {}",
+                                        player_stats.cluster_missile_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_cluster_missile();
+                                }
+                            });
+                            ui[1].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+
+                                //ENERGY VAMPIRE
+                                let button = ui.group(|ui| {
+                                    ui.set_min_width(100.);
+                                    if player_stats.is_energy_vampire_upgrade {
+                                        ui.label(
+                                            RichText::new("Energy Vampire").text_style(small_button_font()).strikethrough().color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                                        );
+                                    } else {
+                                        ui.label(
+                                            RichText::new("Energy Vampire").text_style(small_button_font()).color(Color32::from_rgba_unmultiplied(200, 0, 0, 255)),
+                                        );
+                                    }
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "If a missile kills at least one enemy, refund one energy | Cost: {}",
+                                        player_stats.energy_vampire_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_energy_vampire();
+                                }
+                            });
+                            ui[2].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+
+                                //DYING SCANNERS
+                                let button = ui.group(|ui| {
+                                    ui.set_min_width(100.);
+                                    if player_stats.is_dying_scanners_upgrade {
+                                        ui.label(
+                                            RichText::new("Dying Scanners").text_style(small_button_font()).strikethrough().color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                                        );
+                                    } else {
+                                        ui.label(
+                                            RichText::new("Dying Scanners").text_style(small_button_font()).color(Color32::from_rgba_unmultiplied(200, 0, 0, 255)),
+                                        );
+                                    }
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Killing an enemy releases a small scan around their death point | Cost: {}",
+                                        player_stats.dying_scanners_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_dying_scanners();
+                                }
+                            });
+                            ui[3].vertical_centered(|ui| {
+                                ui.set_max_height(50.);
+
+                                //LARGER MISSILES
+                                let button = ui.group(|ui| {
+                                    ui.set_min_width(100.);
+                                    if player_stats.is_larger_missiles_upgrade {
+                                        ui.label(
+                                            RichText::new("Larger Missiles").text_style(small_button_font()).strikethrough().color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                                        );
+                                    } else {
+                                        ui.label(
+                                            RichText::new("Larger Missiles").text_style(small_button_font()).color(Color32::from_rgba_unmultiplied(200, 0, 0, 255)),
+                                        );
+                                    }
+                                });
+                                let max_energy_button = button.response.interact(Sense::click());
+                                let max_energy_button = max_energy_button.on_hover_text(
+                                    RichText::new(format!(
+                                        "Larger explosion radius for all missiles | Cost: {}",
+                                        player_stats.larger_missiles_upgrade_cost
+                                    ))
+                                        .text_style(small_button_font()),
+                                );
+                                if max_energy_button.clicked() {
+                                    player_stats.upgrade_larger_missiles();
                                 }
                             });
                         });
@@ -549,6 +729,7 @@ fn lose_ui(
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
     mut player_stats: ResMut<PlayerStats>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     let wnd = windows.get_primary().unwrap();
 

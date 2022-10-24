@@ -1,7 +1,7 @@
 pub mod enemy_difficulty;
 pub mod enemy_spawner;
 
-use crate::enemy::enemy_difficulty::EnemyStats;
+use crate::enemy::enemy_difficulty::{EnemyDifficultyPlugin, EnemyStats, update_enemy_count};
 use crate::enemy::enemy_spawner::EnemySpawnerPlugin;
 use crate::{AssetHolder, GameState, PlayerStats, RestartGameEvent, ScoreEvent};
 use bevy::prelude::*;
@@ -13,9 +13,8 @@ pub(crate) struct EnemyPlugin;
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<EnemyStats>();
         app.add_plugin(EnemySpawnerPlugin);
-
+        app.add_plugin(EnemyDifficultyPlugin);
         app.add_system_set(
             ConditionSet::new()
                 .with_system(handle_restart_game_events.run_on_event::<RestartGameEvent>())
@@ -55,7 +54,7 @@ pub(crate) struct VisibilityTimer {
 impl Enemy {
     pub(crate) fn spawn(
         sprites: &Res<AssetHolder>,
-        enemy_stats: &Res<EnemyStats>,
+        enemy_stats: &ResMut<EnemyStats>,
         mut commands: &mut Commands,
         spawn_location: &Vec2,
     ) {
@@ -261,16 +260,6 @@ pub(crate) fn handle_visibility_timers(
     }
 }
 
-pub(crate) fn update_enemy_count(
-    mut enemies: Query<Entity, With<Enemy>>,
-    mut enemy_stats: ResMut<EnemyStats>,
-) {
-    let mut enemy_count = 0;
-    for enemy in enemies.iter_mut() {
-        enemy_count += 1;
-    }
-    enemy_stats.current_enemy_amount = enemy_count;
-}
 
 fn handle_restart_game_events(
     mut commands: Commands,

@@ -48,7 +48,7 @@ impl Plugin for ShieldPlugin {
                 .run_in_state(GameState::Playing)
                 .label("post_shield_loop")
                 .after("shield_loop")
-                .with_system(handle_player_planet_collisions.run_if(is_shield_active))
+                .with_system(handle_player_shield_collisions.run_if(is_shield_active))
                 .into(),
         );
     }
@@ -58,7 +58,7 @@ fn setup_shield(mut commands: Commands) {
     commands
         .spawn_bundle(GeometryBuilder::build_as(
             &shapes::Circle {
-                radius: 40.0,
+                radius: 60.0,
                 center: Default::default(),
             },
             DrawMode::Outlined {
@@ -82,6 +82,9 @@ fn setup_shield(mut commands: Commands) {
         ))
         .insert(ShieldComp)
         .insert(Visibility { is_visible: false })
+        .insert(CollidingEntities::default())
+        .insert(ActiveEvents::COLLISION_EVENTS)
+
         .insert(Sensor);
 }
 
@@ -145,7 +148,7 @@ pub(crate) fn shield(
     mut commands: &mut Commands,
 ) {
     for (entity, mut visibility) in shield_query.iter_mut() {
-        commands.entity(entity).insert(Collider::ball(40.));
+        commands.entity(entity).insert(Collider::ball(60.));
         *visibility = Visibility { is_visible: true };
     }
 }
@@ -160,14 +163,15 @@ pub(crate) fn remove_shield(
     }
 }
 
-pub(crate) fn handle_player_planet_collisions(
-    mut shield: Query<(&CollidingEntities), With<ShieldComp>>,
+pub(crate) fn handle_player_shield_collisions(
+    mut shield: Query<&CollidingEntities, With<ShieldComp>>,
     mut enemy_entities: Query<&Enemy>,
     mut commands: Commands,
 ) {
     if let Ok(shield) = shield.get_single_mut() {
         for collision in shield.iter() {
             if let Ok(_enemy) = enemy_entities.get(collision) {
+                info!("shield collision went throguh");
                 commands.entity(collision).insert(Destroyed);
             }
         }

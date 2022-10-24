@@ -12,6 +12,7 @@ pub(crate) struct PlaySoundEffect(SoundEffects);
 
 pub(crate) enum SoundEffects {
     //GamePlay
+    PlanetDamaged,
     //UI
     UpgradeButton,
     NormalButton,

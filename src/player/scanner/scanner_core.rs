@@ -1,12 +1,14 @@
 ﻿use crate::enemy::{Destroyed, Enemy, Ghost, Scanned};
 use crate::player::input::input_manager::PlayerInputEvents;
+use crate::player::player_missiles::player_missile_core::{EnemyKilledEvent, PlayerMissile};
+use crate::Keyframes::Translation;
 use crate::{AssetHolder, GameState, PlayerStats, RestartGameEvent};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::FillMode;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
-use crate::player::player_missiles::player_missile_core::PlayerMissile;
+use crate::input::input_manager::PlayerInputEvents::Scan;
 
 pub(crate) struct ScannerPlugin;
 
@@ -20,6 +22,7 @@ impl Plugin for ScannerPlugin {
                 .label("scan_loop")
                 .before("main_enemy_loop")
                 .with_system(handle_player_scan_spawn_events.run_on_event::<PlayerInputEvents>())
+                .with_system(handle_enemy_killed_events.run_on_event::<EnemyKilledEvent>())
                 .with_system(increase_scan_radius)
                 .with_system(handle_scanner_collisions)
                 .into(),
@@ -27,14 +30,16 @@ impl Plugin for ScannerPlugin {
         app.add_system_set(
             ConditionSet::new()
                 .with_system(handle_restart_game_events.run_on_event::<RestartGameEvent>())
-                .into()
+                .into(),
         );
     }
 }
 
 #[derive(Component)]
-pub(crate) struct Scan {
+pub(crate) struct ScanComp {
     size: f32,
+    max_size: f32,
+    location: Vec2,
 }
 
 pub(crate) fn handle_player_scan_spawn_events(
@@ -49,7 +54,7 @@ pub(crate) fn handle_player_scan_spawn_events(
             PlayerInputEvents::Scan => {
                 if player_stats.check_if_enough_energy(player_stats.scan_energy_cost) {
                     player_stats.scanner_fired();
-                    scan(&mut commands);
+                    scan(&mut commands, Vec2 { x: 0., y: 0. }, 1000.);
                 }
             }
             PlayerInputEvents::Shield(_) => {}
@@ -57,12 +62,12 @@ pub(crate) fn handle_player_scan_spawn_events(
     }
 }
 
-pub(crate) fn scan(mut commands: &mut Commands) {
+pub(crate) fn scan(mut commands: &mut Commands, location: Vec2, max_size: f32) {
     commands
         .spawn_bundle(GeometryBuilder::build_as(
             &shapes::Circle {
                 radius: 10.0,
-                center: Default::default(),
+                center: default(),
             },
             DrawMode::Outlined {
                 fill_mode: FillMode::color(Color::Rgba {
@@ -81,42 +86,49 @@ pub(crate) fn scan(mut commands: &mut Commands) {
                     3.0,
                 ),
             },
-            Transform::default(),
+            Transform {
+                translation: location.extend(1.0),
+                ..default()
+            }
         ))
         .insert(CollidingEntities::default())
         .insert(ActiveEvents::COLLISION_EVENTS)
-        .insert(Scan { size: 20.0 })
+        .insert(ScanComp {
+            size: 20.0,
+            max_size,
+            location,
+        })
         .insert(Collider::ball(20.0))
         .insert(Sensor);
 }
 
 pub(crate) fn increase_scan_radius(
-    mut query: Query<(Entity, &mut Path, &mut Scan, &mut Collider)>,
+    mut query: Query<(Entity, &mut Path, &mut ScanComp, &mut Collider)>,
     time: Res<Time>,
     player_stats: Res<PlayerStats>,
     mut commands: Commands,
 ) {
     for (entity, mut path, mut scan, mut collider) in query.iter_mut() {
         scan.size += player_stats.scan_speed.0 * time.delta_seconds();
-        let new_size = scan.size + player_stats.scan_speed.0 * time.delta_seconds();
+        let new_size = scan.size;
         let new_circle = shapes::Circle {
             radius: new_size,
-            center: Default::default(),
+            center: default(),
         };
 
-        if scan.size >= 1000. {
+        if scan.size >= scan.max_size {
             commands.entity(entity).despawn();
         }
 
         *path = ShapePath::build_as(&new_circle);
-        *collider = Collider::ball(scan.size);
+        *collider = Collider::ball(new_size);
     }
 }
 
 pub(crate) fn handle_scanner_collisions(
     mut collision_events: EventReader<CollisionEvent>,
-    scans: Query<(&CollidingEntities), With<Scan>>,
-    scan: Query<&Scan>,
+    scans: Query<(&CollidingEntities), With<ScanComp>>,
+    scan: Query<&ScanComp>,
     enemy_entities: Query<&Enemy>,
     ghost_entities: Query<&Ghost>,
     mut commands: Commands,
@@ -159,8 +171,16 @@ pub(crate) fn handle_scanner_collisions(
     }
 }
 
-fn handle_restart_game_events(mut commands: Commands, mut scans: Query<(Entity, &Scan)>) {
+fn handle_restart_game_events(mut commands: Commands, mut scans: Query<(Entity, &ScanComp)>) {
     for (entity, player_missile) in scans.iter_mut() {
         commands.entity(entity).despawn();
+    }
+}
+
+fn handle_enemy_killed_events(mut commands: Commands, mut enemy_killed_event_reader: EventReader<EnemyKilledEvent>, player_stats: Res<PlayerStats>) {
+    for event in enemy_killed_event_reader.iter() {
+        if player_stats.is_dying_scanners_upgrade {
+            scan(&mut commands, event.location, 250.);
+        }
     }
 }

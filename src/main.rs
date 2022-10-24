@@ -50,7 +50,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(16.0))
         .add_plugin(EguiPlugin)
-        .add_plugin(RapierDebugRenderPlugin::default())
+        //.add_plugin(RapierDebugRenderPlugin::default())
         //
         //game base plugins
         .add_plugin(GameSystems)
@@ -90,10 +90,19 @@ struct AssetHolder {
     pub player_missile: Handle<Image>,
     #[asset(path = "player_missile_explosion.png")]
     pub player_missile_explosion: Handle<Image>,
+    #[asset(path = "player_missile_explosion_large.png")]
+    pub player_missile_explosion_large: Handle<Image>,
+    #[asset(path = "player_missile_explosion_medium.png")]
+    pub player_missile_explosion_medium: Handle<Image>,
     #[asset(path = "player_missile_target.png")]
     pub player_missile_target: Handle<Image>,
+
     #[asset(path = "space_commander_logo.png")]
     pub logo: Handle<Image>,
+    #[asset(path = "player_health.png")]
+    pub health: Handle<Image>,
+    #[asset(path = "player_health_empty.png")]
+    pub health_empty: Handle<Image>,
 
     #[asset(path = "enemy.png")]
     pub enemy: Handle<Image>,
