@@ -10,10 +10,11 @@ use crate::game_systems::*;
 use crate::player::*;
 use crate::sound::SoundPlugin;
 use crate::ui::*;
+use bevy::asset::AssetServerSettings;
 
 use bevy::prelude::*;
 use bevy::render::texture::ImageSettings;
-use bevy::window::{close_on_esc, WindowMode};
+use bevy::window::{close_on_esc, PresentMode, WindowMode, WindowResizeConstraints};
 use bevy_asset_loader::prelude::*;
 use bevy_egui::*;
 use bevy_kira_audio::prelude::*;
@@ -38,11 +39,27 @@ fn main() {
         .insert_resource(ImageSettings::default_nearest())
         .insert_resource(WindowDescriptor {
             title: "Space Commander".to_string(),
-            resizable: false,
-            decorations: false,
+            width: 1920.0,
+            height: 1080.0,
+            position: WindowPosition::Automatic,
+            resize_constraints: WindowResizeConstraints {
+                min_width: 960.0,
+                min_height: 480.0,
+                ..Default::default()
+            },
+            scale_factor_override: Some(1.0), //Needed for some mobile devices, but disables scaling
+            present_mode: PresentMode::AutoVsync,
+            resizable: true,
+            decorations: true,
+            cursor_locked: false,
             cursor_visible: true,
-            cursor_locked: true,
-            mode: WindowMode::BorderlessFullscreen,
+            mode: WindowMode::Windowed,
+            transparent: false,
+            canvas: Some("#bevy".to_string()),
+            fit_canvas_to_parent: true,
+        })
+        .insert_resource(AssetServerSettings {
+            watch_for_changes: true,
             ..default()
         })
         // base plugins
@@ -99,8 +116,6 @@ struct AssetHolder {
     #[asset(path = "player_planet.png")]
     pub player_planet: Handle<Image>,
     #[asset(path = "destroyed_planet.png")]
-
-
     pub player_planet_destroyed: Handle<Image>,
     #[asset(path = "player_missile.png")]
     pub player_missile: Handle<Image>,
@@ -178,7 +193,6 @@ struct SoundAssetHolder {
     #[asset(path = "sounds/257565__udderdude__bfxr2.wav")]
     pub shield_hit: Handle<bevy_kira_audio::prelude::AudioSource>,
 
-    //TODO UPDATE TO RIGHT SOUND
     #[asset(path = "sounds/649191__ayadrevis__explosion.ogg")]
     pub planet_damage: Handle<bevy_kira_audio::prelude::AudioSource>,
     /*

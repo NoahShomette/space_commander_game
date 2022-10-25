@@ -10,7 +10,7 @@ impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SoundEffects>();
 
-        app.add_enter_system(GameState::MainMenu, play_bg_music);
+        app.add_enter_system(GameState::GameSetupOnce, play_bg_music);
         app.add_audio_channel::<Background>();
         app.add_audio_channel::<Effects>();
         app.add_audio_channel::<ShieldAudio>();

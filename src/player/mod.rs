@@ -11,14 +11,20 @@ use crate::{AssetHolder, GameState, RestartGameEvent};
 use crate::enemy::{Destroyed, Enemy};
 use crate::player::shield::shield_core::ShieldPlugin;
 use crate::sound::SoundEffects;
+
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
+
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            app.add_plugin(bevy_web_resizer::Plugin);
+        }
         app.add_plugin(ScannerPlugin)
             .add_enter_system(GameState::GameSetupOnce, setup_player)
             .add_system_set(
