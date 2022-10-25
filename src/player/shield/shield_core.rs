@@ -6,6 +6,7 @@ use bevy_prototype_lyon::prelude::FillMode;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
+use crate::sound::SoundEffects;
 
 pub(crate) struct ShieldPlugin;
 
@@ -47,7 +48,7 @@ impl Plugin for ShieldPlugin {
             ConditionSet::new()
                 .run_in_state(GameState::Playing)
                 .label("post_shield_loop")
-                .after("shield_loop")
+                .before("post_enemy_loop")
                 .with_system(handle_player_shield_collisions.run_if(is_shield_active))
                 .into(),
         );
@@ -84,7 +85,6 @@ fn setup_shield(mut commands: Commands) {
         .insert(Visibility { is_visible: false })
         .insert(CollidingEntities::default())
         .insert(ActiveEvents::COLLISION_EVENTS)
-
         .insert(Sensor);
 }
 
@@ -119,6 +119,7 @@ pub(crate) fn handle_player_shield_events(
     mut shield_query: Query<(Entity, &mut Visibility), With<ShieldComp>>,
     mut commands: Commands,
     mut player_input_event_reader: EventReader<PlayerInputEvents>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     for event in player_input_event_reader.iter() {
         match event {
@@ -131,11 +132,13 @@ pub(crate) fn handle_player_shield_events(
                         shield_resource.is_active = true;
                         shield_resource.time_till_next_cost = 0.0;
                         player_stats.shield_cost();
+                        sound_effect_writer.send(SoundEffects::ShieldOn(true));
                         shield(&mut shield_query, &mut commands);
                     }
                 } else {
                     player_stats.is_regaining_energy = true;
                     shield_resource.is_active = false;
+                    sound_effect_writer.send(SoundEffects::ShieldOn(false));
                     remove_shield(&mut shield_query, &mut commands);
                 }
             }
@@ -167,11 +170,12 @@ pub(crate) fn handle_player_shield_collisions(
     mut shield: Query<&CollidingEntities, With<ShieldComp>>,
     mut enemy_entities: Query<&Enemy>,
     mut commands: Commands,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     if let Ok(shield) = shield.get_single_mut() {
         for collision in shield.iter() {
             if let Ok(_enemy) = enemy_entities.get(collision) {
-                info!("shield collision went throguh");
+                sound_effect_writer.send(SoundEffects::ShieldHit);
                 commands.entity(collision).insert(Destroyed);
             }
         }

@@ -8,6 +8,7 @@ use crate::enemy::enemy_difficulty::EnemyStats;
 use crate::enemy::{Enemy, VisibilityTimer,
 };
 use crate::{AssetHolder, GameState};
+use crate::sound::SoundEffects;
 
 pub(crate) struct EnemySpawnerPlugin;
 
@@ -32,7 +33,7 @@ impl Plugin for EnemySpawnerPlugin {
         app.add_stage_before(
             CoreStage::Update,
             "FixedUpdate",
-            FixedTimestepStage::from_stage(Duration::from_secs_f32(5.0), fixed_update),
+            FixedTimestepStage::from_stage(Duration::from_secs_f32(2.0), fixed_update),
         );
 
         app.add_system_set(
@@ -220,13 +221,8 @@ fn setup_warning_sprites(
 }
 
 
-fn update_timestep(mut timesteps: ResMut<FixedTimestepInfo>) {
-    // we can access our timestep by name
-    //let info = timesteps.get_mut("my_fixed_update").unwrap();
-    // set a different duration
-    timesteps.step = Duration::from_millis(125);
-    // pause it
-    //info.paused = true;
+fn update_timestep(mut timesteps: ResMut<FixedTimestepInfo>, enemy_stats: Res<EnemyStats>) {
+    timesteps.step = Duration::from_secs_f32(enemy_stats.time_between_waves);
 }
 
 fn spawn_next_wave(
@@ -250,12 +246,14 @@ fn handle_spawn_events(
         (Entity, &mut VisibilityTimer, &mut Visibility, &SpawnSide),
         With<Warning>,
     >,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     for event in spawn_event_reader.iter() {
         for (entity, mut visibility_timer, mut visibility, spawn_side) in timed_enemies.iter_mut() {
             if *spawn_side == event.0 {
                 *visibility = Visibility { is_visible: true };
                 visibility_timer.visibility_timer.reset();
+                sound_effect_writer.send(SoundEffects::EnemySpawnWarning);
             }
         }
     }

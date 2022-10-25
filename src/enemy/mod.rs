@@ -33,6 +33,7 @@ impl Plugin for EnemyPlugin {
         app.add_system_set(
             ConditionSet::new()
                 .run_in_state(GameState::Playing)
+                .label("post_enemy_loop")
                 .after("main_enemy_loop")
                 .with_system(handle_enemy_collision_changes)
                 .with_system(update_enemy_count)

@@ -58,6 +58,7 @@ pub struct SpawnMissileEvent {
 pub(crate) struct PlayerMissile {
     target: Vec2,
     reached_target: bool,
+    already_played_explosion_sound: bool,
     time_since_explsion: f32,
     target_entity: Entity,
     enemy_killed: bool,
@@ -185,9 +186,10 @@ impl PlayerMissileBundle {
             player_missile: PlayerMissile {
                 target,
                 reached_target: false,
+                already_played_explosion_sound: false,
                 time_since_explsion: 0.0,
                 target_entity,
-                enemy_killed: false
+                enemy_killed: false,
             },
         }
     }
@@ -198,10 +200,12 @@ pub(crate) fn handle_player_missile_spawn_events(
     mut player_stats: ResMut<PlayerStats>,
     mut commands: Commands,
     mut spawn_missile_event_reader: EventReader<PlayerInputEvents>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     for event in spawn_missile_event_reader.iter() {
         match event {
             PlayerInputEvents::FireMissile(target) => {
+                sound_effect_writer.send(SoundEffects::MissileLaunched);
                 PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, *target, false);
                 if player_stats.is_cluster_missile_upgrade {
                     let mut cluster_dif: f32 = 20.;
@@ -252,13 +256,14 @@ pub(crate) fn update_missiles(
 pub(crate) fn missile_explode(
     sprites: Res<AssetHolder>,
     mut missile_query: Query<
-        (Entity, &mut Handle<Image>, &PlayerMissile, &mut Velocity, &mut Transform),
+        (Entity, &mut Handle<Image>, &mut PlayerMissile, &mut Velocity, &mut Transform),
         Changed<PlayerMissile>,
     >,
     mut commands: Commands,
     player_stats: Res<PlayerStats>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
-    for (entity, mut sprite, player_missile, mut velocity, mut transform) in missile_query.iter_mut() {
+    for (entity, mut sprite, mut player_missile, mut velocity, mut transform) in missile_query.iter_mut() {
         if player_missile.reached_target {
             velocity.linvel = Vec2::ZERO;
             let mut radius: f32 = 8.;
@@ -268,7 +273,10 @@ pub(crate) fn missile_explode(
             } else {
                 *sprite = sprites.player_missile_explosion.clone();
             }
-
+            if !player_missile.already_played_explosion_sound {
+                sound_effect_writer.send(SoundEffects::MissileExplosion);
+                player_missile.already_played_explosion_sound = true;
+            }
             commands.entity(entity).insert(Collider::ball(radius));
         }
     }

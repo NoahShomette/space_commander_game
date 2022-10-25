@@ -1,6 +1,8 @@
 ﻿use crate::enemy::{Destroyed, Enemy, Ghost, Scanned};
+use crate::input::input_manager::PlayerInputEvents::Scan;
 use crate::player::input::input_manager::PlayerInputEvents;
 use crate::player::player_missiles::player_missile_core::{EnemyKilledEvent, PlayerMissile};
+use crate::sound::SoundEffects;
 use crate::Keyframes::Translation;
 use crate::{AssetHolder, GameState, PlayerStats, RestartGameEvent};
 use bevy::prelude::*;
@@ -8,7 +10,6 @@ use bevy_prototype_lyon::prelude::FillMode;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
-use crate::input::input_manager::PlayerInputEvents::Scan;
 
 pub(crate) struct ScannerPlugin;
 
@@ -25,6 +26,7 @@ impl Plugin for ScannerPlugin {
                 .with_system(handle_enemy_killed_events.run_on_event::<EnemyKilledEvent>())
                 .with_system(increase_scan_radius)
                 .with_system(handle_scanner_collisions)
+                .with_system(handle_auto_scan)
                 .into(),
         );
         app.add_system_set(
@@ -47,6 +49,7 @@ pub(crate) fn handle_player_scan_spawn_events(
     mut player_stats: ResMut<PlayerStats>,
     mut commands: Commands,
     mut player_input_event_reader: EventReader<PlayerInputEvents>,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     for event in player_input_event_reader.iter() {
         match event {
@@ -55,6 +58,7 @@ pub(crate) fn handle_player_scan_spawn_events(
                 if player_stats.check_if_enough_energy(player_stats.scan_energy_cost) {
                     player_stats.scanner_fired();
                     scan(&mut commands, Vec2 { x: 0., y: 0. }, 1000.);
+                    sound_effect_writer.send(SoundEffects::ScanStarted);
                 }
             }
             PlayerInputEvents::Shield(_) => {}
@@ -89,7 +93,7 @@ pub(crate) fn scan(mut commands: &mut Commands, location: Vec2, max_size: f32) {
             Transform {
                 translation: location.extend(1.0),
                 ..default()
-            }
+            },
         ))
         .insert(CollidingEntities::default())
         .insert(ActiveEvents::COLLISION_EVENTS)
@@ -132,6 +136,7 @@ pub(crate) fn handle_scanner_collisions(
     enemy_entities: Query<&Enemy>,
     ghost_entities: Query<&Ghost>,
     mut commands: Commands,
+    mut sound_effect_writer: EventWriter<SoundEffects>,
 ) {
     //using collision events so that we can have it only activate on start
     //we iterate through all the collision events - then we match that to only get the starting ones
@@ -144,12 +149,14 @@ pub(crate) fn handle_scanner_collisions(
                     if let Ok(_scan) = scan.get(*b) {
                         info!("did scan an enemy");
                         commands.entity(*a).insert(Scanned);
+                        sound_effect_writer.send(SoundEffects::ScanEnemy);
                     }
                 }
                 if let Ok(_enemy) = enemy_entities.get(*b) {
                     if let Ok(_scan) = scan.get(*a) {
                         info!("did scan an enemy");
                         commands.entity(*b).insert(Scanned);
+                        sound_effect_writer.send(SoundEffects::ScanEnemy);
                     }
                 }
                 //handles testing for ghost entities
@@ -171,16 +178,28 @@ pub(crate) fn handle_scanner_collisions(
     }
 }
 
-fn handle_restart_game_events(mut commands: Commands, mut scans: Query<(Entity, &ScanComp)>) {
-    for (entity, player_missile) in scans.iter_mut() {
-        commands.entity(entity).despawn();
-    }
+fn handle_auto_scan(
+    mut player_stats: ResMut<PlayerStats>,
+    time: Res<Time>,
+    mut input_event_writer: EventWriter<PlayerInputEvents>,
+) {
+    player_stats.auto_scan_tick(time, input_event_writer);
 }
 
-fn handle_enemy_killed_events(mut commands: Commands, mut enemy_killed_event_reader: EventReader<EnemyKilledEvent>, player_stats: Res<PlayerStats>) {
+fn handle_enemy_killed_events(
+    mut commands: Commands,
+    mut enemy_killed_event_reader: EventReader<EnemyKilledEvent>,
+    player_stats: Res<PlayerStats>,
+) {
     for event in enemy_killed_event_reader.iter() {
         if player_stats.is_dying_scanners_upgrade {
             scan(&mut commands, event.location, 250.);
         }
+    }
+}
+
+fn handle_restart_game_events(mut commands: Commands, mut scans: Query<(Entity, &ScanComp)>) {
+    for (entity, player_missile) in scans.iter_mut() {
+        commands.entity(entity).despawn();
     }
 }

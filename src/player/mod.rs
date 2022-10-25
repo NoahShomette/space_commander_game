@@ -46,6 +46,9 @@ impl Plugin for PlayerPlugin {
 }
 
 pub struct PlayerStats {
+    pub(crate) is_auto_scan: bool,
+    pub(crate) auto_scan_info: (f32, f32, f32, f32), // (current time till next scan, the target time till next scan, the min time you can set it to, the max time you can set it to)
+
     pub(crate) current_health: u32,
     pub(crate) max_health: u32,
     pub(crate) health_recharge_time: (f32, f32, f32),
@@ -62,7 +65,6 @@ pub struct PlayerStats {
     pub(crate) missile_energy_cost: u32,
 
     pub(crate) current_points: u32,
-    pub(crate) score: u32,
     pub(crate) locked_score: u32,
 
     pub(crate) scan_speed: (f32, f32, f32),
@@ -75,14 +77,13 @@ pub struct PlayerStats {
 
     //costs for upgrades
     pub(crate) max_energy_upgrade_cost: u32,
+    pub(crate) energy_recharge_amount_upgrade_cost: u32,
     pub(crate) energy_recharge_rate_upgrade_cost: u32,
 
-    pub(crate) missile_energy_cost_upgrade_cost: u32,
     pub(crate) missile_speed_upgrade_cost: u32,
 
     pub(crate) max_health_upgrade_cost: u32,
     pub(crate) current_health_increase_cost: u32,
-    pub(crate) health_recharge_cost: u32,
 
     pub(crate) scan_speed_upgrade_cost: u32,
 
@@ -106,22 +107,25 @@ pub struct PlayerStats {
 impl Default for PlayerStats {
     fn default() -> Self {
         PlayerStats {
+            is_auto_scan: false,
+            auto_scan_info: (0., 5.0, 1.0, 10.0),
+
             current_health: 2,
-            max_health: 8,
+            max_health: 2,
             health_recharge_time: (30., 1., 1.),
             time_till_next_health: 0.,
 
             is_regaining_energy: true,
             max_energy: 6,
             current_energy: 6,
-            energy_recharge_rate: (4.0, 0.1, 0.3),
+            energy_recharge_rate: (4.0, 0.4, 0.2),
             time_till_next_energy: 0.,
             energy_per_recharge: 1,
 
             missile_speed: (100., 500., 25.),
             missile_energy_cost: 1,
+
             current_points: 0,
-            score: 30000,
             locked_score: 0,
 
             scan_speed: (50.0, 200., 25.),
@@ -132,19 +136,18 @@ impl Default for PlayerStats {
             enemy_kill_score: 5,
 
             //costs for upgrades
-            max_energy_upgrade_cost: 35,
-            energy_recharge_rate_upgrade_cost: 25,
+            max_energy_upgrade_cost: 15,
+            energy_recharge_amount_upgrade_cost: 40,
+            energy_recharge_rate_upgrade_cost: 20,
 
-            missile_energy_cost_upgrade_cost: 0,
-            missile_speed_upgrade_cost: 35,
+            missile_speed_upgrade_cost: 10,
 
-            max_health_upgrade_cost: 50,
-            current_health_increase_cost: 30,
-            health_recharge_cost: 30,
+            max_health_upgrade_cost: 20,
+            current_health_increase_cost: 15,
 
-            scan_speed_upgrade_cost: 35,
+            scan_speed_upgrade_cost: 10,
 
-            shield_time_upgrade_cost: 35,
+            shield_time_upgrade_cost: 10,
 
             is_cluster_missile_upgrade: false,
             cluster_missile_upgrade_cost: 200,
@@ -164,18 +167,41 @@ impl Default for PlayerStats {
 }
 
 impl PlayerStats {
-    pub(crate) fn recharge_energy(&mut self) {
-        self.current_energy += self.energy_per_recharge;
-        if self.current_energy > self.max_energy {
-            self.current_energy = self.max_energy;
+    pub(crate) fn toggle_auto_scan(&mut self) {
+        self.is_auto_scan = !self.is_auto_scan;
+        self.auto_scan_info.0 = 0.;
+    }
+
+    pub(crate) fn auto_scan_tick(
+        &mut self,
+        time: Res<Time>,
+        mut input_event_writer: EventWriter<PlayerInputEvents>,
+    ) {
+        if self.is_auto_scan {
+            self.auto_scan_info.0 += time.delta_seconds();
+            if self.auto_scan_info.0 >= self.auto_scan_info.1 {
+                self.auto_scan_info.0 = 0.;
+                input_event_writer.send(PlayerInputEvents::Scan);
+            }
         }
     }
 
-    pub(crate) fn plus_one_energy(&mut self) {
+    pub(crate) fn recharge_energy(&mut self) -> bool {
+        self.current_energy += self.energy_per_recharge;
+        if self.current_energy > self.max_energy {
+            self.current_energy = self.max_energy;
+            return true;
+        }
+        return false;
+    }
+
+    pub(crate) fn plus_one_energy(&mut self) -> bool {
         self.current_energy += 1;
         if self.current_energy > self.max_energy {
             self.current_energy = self.max_energy;
+            return true;
         }
+        return false;
     }
 
     pub(crate) fn check_if_enough_energy(&self, amount_needed: u32) -> bool {
@@ -192,6 +218,7 @@ impl PlayerStats {
 
     pub(crate) fn scanner_fired(&mut self) {
         self.current_energy -= self.scan_energy_cost;
+        self.auto_scan_info.0 = 0.;
     }
 
     pub(crate) fn shield_cost(&mut self) {
@@ -201,140 +228,204 @@ impl PlayerStats {
     //upgrades
 
     //ENERGY
-    pub(crate) fn upgrade_max_energy(&mut self) {
+    pub(crate) fn upgrade_max_energy(&mut self) -> bool {
         if self.check_if_enough_score(self.max_energy_upgrade_cost) {
             self.max_energy += 1;
             self.increase_all_time_score_count(self.max_energy_upgrade_cost);
             self.remove_score(self.max_energy_upgrade_cost);
+            return true;
         }
+        return false;
     }
-    pub(crate) fn upgrade_energy_charge(&mut self) {
-        if self.check_if_enough_score(self.energy_recharge_rate_upgrade_cost) {
+    pub(crate) fn upgrade_energy_charge(&mut self) -> bool {
+        if self.check_if_enough_score(self.energy_recharge_amount_upgrade_cost) {
             self.energy_per_recharge += 1;
+            self.increase_all_time_score_count(self.energy_recharge_amount_upgrade_cost);
+            self.remove_score(self.energy_recharge_amount_upgrade_cost);
+            return true;
+        }
+        return false;
+    }
+
+    pub(crate) fn upgrade_energy_charge_speed(&mut self) -> bool {
+        if self.check_if_enough_score(self.energy_recharge_rate_upgrade_cost)
+            && self.energy_recharge_rate.0 > self.energy_recharge_rate.1
+        {
+            self.energy_recharge_rate.0 -= self.energy_recharge_rate.2;
             self.increase_all_time_score_count(self.energy_recharge_rate_upgrade_cost);
             self.remove_score(self.energy_recharge_rate_upgrade_cost);
+            return true;
         }
+        return false;
+    }
+
+    pub(crate) fn check_energy_recharge_speed_maxed(&mut self) -> bool {
+        if self.energy_recharge_rate.0 <= self.energy_recharge_rate.1 {
+            return true;
+        }
+        return false;
     }
 
     //HEALTH
-    pub(crate) fn upgrade_max_health(&mut self) {
+    pub(crate) fn upgrade_max_health(&mut self) -> bool {
         if self.check_if_enough_score(self.max_health_upgrade_cost) {
             self.max_health += 1;
             self.heal();
             self.increase_all_time_score_count(self.max_health_upgrade_cost);
             self.remove_score(self.max_health_upgrade_cost);
+            return true;
         }
+        return false;
     }
 
-    pub(crate) fn plus_current_health(&mut self) {
-        if self.check_if_enough_score(self.current_health_increase_cost) {
-            if self.current_health < self.max_health {
-                self.current_health += 1;
-                self.increase_all_time_score_count(self.current_health_increase_cost);
-                self.remove_score(self.current_health_increase_cost);
-            }
+    pub(crate) fn plus_current_health(&mut self) -> bool {
+        if self.check_if_enough_score(self.current_health_increase_cost)
+            && self.current_health < self.max_health
+        {
+            self.current_health += 1;
+            self.increase_all_time_score_count(self.current_health_increase_cost);
+            self.remove_score(self.current_health_increase_cost);
+            return true;
         }
+        return false;
     }
 
-    pub(crate) fn heal(&mut self) {
+    pub(crate) fn heal(&mut self) -> bool {
         if self.current_health < self.max_health {
             self.current_health += 1;
+            return true;
         }
+        return false;
+    }
+
+    pub(crate) fn check_energy_full_health(&mut self) -> bool {
+        if self.current_health < self.max_health {
+            return false;
+        }
+        return true;
     }
 
     //SCAN
-    pub(crate) fn upgrade_scan_speed(&mut self) {
+    pub(crate) fn upgrade_scan_speed(&mut self) -> bool {
         if self.check_if_enough_score(self.scan_speed_upgrade_cost)
             && self.scan_speed.0 <= self.scan_speed.1
         {
             self.scan_speed.0 += self.scan_speed.2;
             self.increase_all_time_score_count(self.scan_speed_upgrade_cost);
             self.remove_score(self.scan_speed_upgrade_cost);
+            return true;
         }
+        return false;
+    }
+    pub(crate) fn check_scan_speed_maxed(&mut self) -> bool {
+        if self.scan_speed.0 >= self.scan_speed.1 {
+            return true;
+        }
+        return false;
     }
 
     //SHIELD
-    pub(crate) fn upgrade_shield_time(&mut self) {
+    pub(crate) fn upgrade_shield_time(&mut self) -> bool {
         if self.check_if_enough_score(self.shield_time_upgrade_cost) {
             self.shield_cost_rate += 1.;
             self.increase_all_time_score_count(self.shield_time_upgrade_cost);
             self.remove_score(self.shield_time_upgrade_cost);
+            return true;
         }
+        return false;
     }
 
     //MISSILE
-    pub(crate) fn upgrade_missile_speed(&mut self) {
+    pub(crate) fn upgrade_missile_speed(&mut self) -> bool {
         if self.check_if_enough_score(self.missile_speed_upgrade_cost)
-            && self.missile_speed.0 <= self.missile_speed.1
+            && self.missile_speed.0 < self.missile_speed.1
         {
             self.missile_speed.0 += self.missile_speed.2;
             self.increase_all_time_score_count(self.missile_speed_upgrade_cost);
             self.remove_score(self.missile_speed_upgrade_cost);
+            return true;
         }
+        return false;
+    }
+
+    pub(crate) fn check_missile_speed_maxed(&mut self) -> bool {
+        if self.missile_speed.0 >= self.missile_speed.1 {
+            return true;
+        }
+        return false;
     }
 
     //Super Upgrades
     //MISSILE
-    pub(crate) fn upgrade_cluster_missile(&mut self) {
+    pub(crate) fn upgrade_cluster_missile(&mut self) -> bool {
         if self.check_if_enough_score(self.cluster_missile_upgrade_cost)
             && self.is_cluster_missile_upgrade == false
         {
             self.is_cluster_missile_upgrade = true;
             self.increase_all_time_score_count(self.cluster_missile_upgrade_cost);
             self.remove_score(self.cluster_missile_upgrade_cost);
+            return true;
         }
+        return false;
     }
-    pub(crate) fn upgrade_energy_vampire(&mut self) {
+    pub(crate) fn upgrade_energy_vampire(&mut self) -> bool {
         if self.check_if_enough_score(self.energy_vampire_upgrade_cost)
             && self.is_energy_vampire_upgrade == false
         {
             self.is_energy_vampire_upgrade = true;
             self.increase_all_time_score_count(self.energy_vampire_upgrade_cost);
             self.remove_score(self.energy_vampire_upgrade_cost);
+            return true;
         }
+        return false;
     }
-    pub(crate) fn upgrade_dying_scanners(&mut self) {
+    pub(crate) fn upgrade_dying_scanners(&mut self) -> bool {
         if self.check_if_enough_score(self.dying_scanners_upgrade_cost)
             && self.is_dying_scanners_upgrade == false
         {
             self.is_dying_scanners_upgrade = true;
             self.increase_all_time_score_count(self.dying_scanners_upgrade_cost);
             self.remove_score(self.dying_scanners_upgrade_cost);
+            return true;
         }
+        return false;
     }
-    pub(crate) fn upgrade_larger_missiles(&mut self) {
+    pub(crate) fn upgrade_larger_missiles(&mut self) -> bool {
         if self.check_if_enough_score(self.larger_missiles_upgrade_cost)
             && self.is_larger_missiles_upgrade == false
         {
             self.is_larger_missiles_upgrade = true;
             self.increase_all_time_score_count(self.larger_missiles_upgrade_cost);
             self.remove_score(self.larger_missiles_upgrade_cost);
+            return true;
         }
+        return false;
     }
 
     //score related stuff
     pub(crate) fn add_score(&mut self, amount: u32) {
-        self.score += amount;
+        self.current_points += amount;
     }
 
-    pub(crate) fn lock_remaining_score(&mut self) {
-        self.locked_score += self.score;
-        self.increase_all_time_score_count(self.score);
-        self.score = 0;
+    pub(crate) fn lock_remaining_score(&mut self) -> bool {
+        self.locked_score += self.current_points;
+        self.increase_all_time_score_count(self.current_points);
+        self.current_points = 0;
+        return true;
     }
 
     pub(crate) fn check_if_enough_score(&mut self, cost: u32) -> bool {
-        if self.score >= cost {
+        if self.current_points >= cost {
             return true;
         }
         return false;
     }
 
     pub(crate) fn remove_score(&mut self, amount: u32) {
-        if self.score as i32 - amount as i32 <= 0 {
-            self.score = 0;
+        if self.current_points as i32 - amount as i32 <= 0 {
+            self.current_points = 0;
         } else {
-            self.score -= amount;
+            self.current_points -= amount;
         }
     }
 
