@@ -131,7 +131,7 @@ impl Default for PlayerStats {
             missile_speed: (100., 500., 25.),
             missile_energy_cost: 1,
 
-            current_points: 40000,
+            current_points: 0,
             locked_score: 0,
             time_till_next_score: 0.,
 
