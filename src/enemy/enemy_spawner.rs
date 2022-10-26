@@ -1,21 +1,20 @@
 ﻿use bevy::prelude::*;
+use iyes_loopless::fixedtimestep::*;
 use iyes_loopless::prelude::*;
 use rand::prelude::*;
 use std::time::Duration;
-use iyes_loopless::fixedtimestep::*;
+use bevy::time::FixedTimesteps;
 
 use crate::enemy::enemy_difficulty::EnemyStats;
-use crate::enemy::{Enemy, VisibilityTimer,
-};
+use crate::enemy::{Enemy, VisibilityTimer};
+use crate::sound::SoundEffectEvents;
 use crate::{AssetHolder, GameState};
-use crate::sound::SoundEffects;
 
 pub(crate) struct EnemySpawnerPlugin;
 
 impl Plugin for EnemySpawnerPlugin {
     fn build(&self, app: &mut App) {
         let mut fixed_update = SystemStage::parallel();
-
         fixed_update.add_system(
             spawn_next_wave
                 // only do it in-game
@@ -220,9 +219,8 @@ fn setup_warning_sprites(
     SpawnSide::spawn_warning_object(&SpawnSide::Bottom, &sprites, &spawn_res, &mut commands);
 }
 
-
 fn update_timestep(mut timesteps: ResMut<FixedTimestepInfo>, enemy_stats: Res<EnemyStats>) {
-    timesteps.step = Duration::from_secs_f32(enemy_stats.time_between_waves);
+    timesteps.step = Duration::from_secs_f32(enemy_stats.time_between_microwaves);
 }
 
 fn spawn_next_wave(
@@ -232,7 +230,7 @@ fn spawn_next_wave(
     mut commands: Commands,
     mut spawn_event_writer: EventWriter<NewSpawnEvent>,
 ) {
-    for i in 0..enemy_stats.amount_to_spawn_a_wave {
+    for i in 0..enemy_stats.amount_to_spawn_in_microwave {
         let (new_spawn_point, spawn_side) = &spawn_res.new_spawn_point();
         Enemy::spawn(&sprites, &enemy_stats, &mut commands, new_spawn_point);
         spawn_event_writer.send(NewSpawnEvent(*spawn_side));
@@ -246,14 +244,14 @@ fn handle_spawn_events(
         (Entity, &mut VisibilityTimer, &mut Visibility, &SpawnSide),
         With<Warning>,
     >,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     for event in spawn_event_reader.iter() {
         for (entity, mut visibility_timer, mut visibility, spawn_side) in timed_enemies.iter_mut() {
             if *spawn_side == event.0 {
                 *visibility = Visibility { is_visible: true };
                 visibility_timer.visibility_timer.reset();
-                sound_effect_writer.send(SoundEffects::EnemySpawnWarning);
+                sound_effect_writer.send(SoundEffectEvents::EnemySpawnWarning);
             }
         }
     }

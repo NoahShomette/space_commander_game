@@ -8,7 +8,7 @@ mod ui;
 use crate::enemy::EnemyPlugin;
 use crate::game_systems::*;
 use crate::player::*;
-use crate::sound::SoundPlugin;
+use crate::sound::{SoundPlugin, SoundSettingsEvents};
 use crate::ui::*;
 use bevy::asset::AssetServerSettings;
 
@@ -22,8 +22,14 @@ use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
 
 fn main() {
-    App::new()
-        .add_loopless_state(GameState::AssetLoading)
+    let mut app = App::new();
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        app.add_plugin(bevy_web_resizer::Plugin);
+    }
+
+    app.add_loopless_state(GameState::AssetLoading)
         .add_loading_state(
             LoadingState::new(GameState::AssetLoading)
                 .continue_to_state(GameState::GameSetupOnce)
@@ -53,7 +59,7 @@ fn main() {
             decorations: true,
             cursor_locked: false,
             cursor_visible: true,
-            mode: WindowMode::Windowed,
+            mode: WindowMode::BorderlessFullscreen,
             transparent: false,
             canvas: Some("#bevy".to_string()),
             fit_canvas_to_parent: true,
@@ -86,15 +92,34 @@ fn main() {
 
 pub(crate) struct GameSettings {
     is_sound_on: bool,
-    sound_level: (f32, f32, f32),
+    is_bg_sound_on: bool,
+    sound_level: (f64, f64, f64),
+    bg_sound_level: (f64, f64, f64),
+    effects_sound_level: (f64, f64, f64),
+
 }
 
 impl Default for GameSettings {
     fn default() -> Self {
         GameSettings {
             is_sound_on: true,
-            sound_level: (0.0, 75.0, 100.0),
+            is_bg_sound_on: true,
+            sound_level: (0.0, 0.5, 1.0),
+            bg_sound_level: (0.0, 0.15, 1.0),
+            effects_sound_level: (0.0, 0.5, 1.0),
+
         }
+    }
+}
+
+impl GameSettings {
+    fn toggle_sound(&mut self, mut sound_settings_event: &mut EventWriter<SoundSettingsEvents>) {
+        self.is_sound_on = !self.is_sound_on;
+        sound_settings_event.send(SoundSettingsEvents::SoundToggle(self.is_sound_on));
+    }
+    fn toggle_bg_sound(&mut self, mut sound_settings_event: &mut EventWriter<SoundSettingsEvents>) {
+        self.is_bg_sound_on = !self.is_bg_sound_on;
+        sound_settings_event.send(SoundSettingsEvents::BGToggle(self.is_bg_sound_on));
     }
 }
 
@@ -184,7 +209,6 @@ struct SoundAssetHolder {
 
     #[asset(path = "sounds/523224__bbqgiraffe__distant-explosion.wav")]
     pub missile_explosion: Handle<bevy_kira_audio::prelude::AudioSource>,
-    //TODO UPDATE TO LAUNCH SOUND
     #[asset(path = "sounds/458664__jorgerosa__missile-explosion.ogg")]
     pub missile_launch: Handle<bevy_kira_audio::prelude::AudioSource>,
 

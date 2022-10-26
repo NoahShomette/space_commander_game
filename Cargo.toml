@@ -40,3 +40,6 @@ rand = "0.8.5"
 wasm-bindgen = "0.2.83"
 bevy-web-resizer = "3.0"
 
+[build-dependencies]
+embed-resource = "1.4"
+

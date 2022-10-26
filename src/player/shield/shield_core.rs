@@ -6,7 +6,7 @@ use bevy_prototype_lyon::prelude::FillMode;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
-use crate::sound::SoundEffects;
+use crate::sound::SoundEffectEvents;
 
 pub(crate) struct ShieldPlugin;
 
@@ -119,7 +119,7 @@ pub(crate) fn handle_player_shield_events(
     mut shield_query: Query<(Entity, &mut Visibility), With<ShieldComp>>,
     mut commands: Commands,
     mut player_input_event_reader: EventReader<PlayerInputEvents>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     for event in player_input_event_reader.iter() {
         match event {
@@ -132,13 +132,13 @@ pub(crate) fn handle_player_shield_events(
                         shield_resource.is_active = true;
                         shield_resource.time_till_next_cost = 0.0;
                         player_stats.shield_cost();
-                        sound_effect_writer.send(SoundEffects::ShieldOn(true));
+                        sound_effect_writer.send(SoundEffectEvents::ShieldOn(true));
                         shield(&mut shield_query, &mut commands);
                     }
                 } else {
                     player_stats.is_regaining_energy = true;
                     shield_resource.is_active = false;
-                    sound_effect_writer.send(SoundEffects::ShieldOn(false));
+                    sound_effect_writer.send(SoundEffectEvents::ShieldOn(false));
                     remove_shield(&mut shield_query, &mut commands);
                 }
             }
@@ -170,12 +170,12 @@ pub(crate) fn handle_player_shield_collisions(
     mut shield: Query<&CollidingEntities, With<ShieldComp>>,
     mut enemy_entities: Query<&Enemy>,
     mut commands: Commands,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     if let Ok(shield) = shield.get_single_mut() {
         for collision in shield.iter() {
             if let Ok(_enemy) = enemy_entities.get(collision) {
-                sound_effect_writer.send(SoundEffects::ShieldHit);
+                sound_effect_writer.send(SoundEffectEvents::ShieldHit);
                 commands.entity(collision).insert(Destroyed);
             }
         }

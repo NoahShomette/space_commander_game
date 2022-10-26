@@ -8,14 +8,16 @@ pub(crate) struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SoundEffects>();
+        app.add_event::<SoundEffectEvents>();
+        app.add_event::<SoundSettingsEvents>();
 
         app.add_enter_system(GameState::GameSetupOnce, play_bg_music);
         app.add_audio_channel::<Background>();
         app.add_audio_channel::<Effects>();
         app.add_audio_channel::<ShieldAudio>();
 
-        app.add_system(handle_sound_events.run_on_event::<SoundEffects>());
+        app.add_system(handle_sound_events.run_on_event::<SoundEffectEvents>());
+        app.add_system(handle_sound_settings.run_on_event::<SoundSettingsEvents>());
     }
 }
 
@@ -25,7 +27,15 @@ struct Effects;
 
 struct Background;
 
-pub(crate) enum SoundEffects {
+pub(crate) enum SoundSettingsEvents {
+    SoundToggle(bool),
+    BGToggle(bool),
+    SoundVolumeMaster(f64),
+    SoundVolumeBg(f64),
+    SoundVolumeEffects(f64),
+}
+
+pub(crate) enum SoundEffectEvents {
     //GamePlay
     PlanetDamaged,
 
@@ -40,6 +50,7 @@ pub(crate) enum SoundEffects {
     //
     ShieldOn(bool),
     ShieldHit,
+
     //UI
     NormalButton,
     SmallUpgradeButton,
@@ -47,20 +58,57 @@ pub(crate) enum SoundEffects {
     ErrorButton,
 }
 
-fn play_bg_music(
+fn handle_sound_settings(
     sounds: Res<SoundAssetHolder>,
-    audio: Res<AudioChannel<Background>>,
+    bg_audio: Res<AudioChannel<Background>>,
+    effect_audio: Res<AudioChannel<Effects>>,
+    shield_audio: Res<AudioChannel<ShieldAudio>>,
+    game_settings: Res<GameSettings>,
+    mut events: EventReader<SoundSettingsEvents>,
+) {
+    for event in events.iter() {
+        match event {
+            SoundSettingsEvents::SoundToggle(bool) => {
+                if *bool == true && game_settings.is_bg_sound_on {
+                    bg_audio
+                        .play(sounds.music.clone())
+                        .with_volume(0.10)
+                        .looped();
+                } else {
+                    bg_audio.stop();
+                }
+            }
+            SoundSettingsEvents::BGToggle(bool) => {
+                if *bool == true && game_settings.is_sound_on {
+                    bg_audio
+                        .play(sounds.music.clone())
+                        .with_volume(0.10)
+                        .looped();
+                } else {
+                    bg_audio.stop();
+                }
+            }
+
+            SoundSettingsEvents::SoundVolumeMaster(volume) => {
+                bg_audio.set_volume(*volume * game_settings.bg_sound_level.1 as f64);
+                effect_audio.set_volume(*volume * game_settings.effects_sound_level.1 as f64);
+                shield_audio.set_volume(*volume * game_settings.effects_sound_level.1 as f64);
+            }
+            SoundSettingsEvents::SoundVolumeBg(_) => {}
+            SoundSettingsEvents::SoundVolumeEffects(_) => {}
+        }
+    }
+}
+
+fn play_bg_music(
+    mut sound_settings_writer: EventWriter<SoundSettingsEvents>,
     game_settings: Res<GameSettings>,
 ) {
-    if !game_settings.is_sound_on {
-        return;
-    }
-
-    audio.play(sounds.music.clone()).with_volume(0.10).looped();
+    sound_settings_writer.send(SoundSettingsEvents::SoundToggle(game_settings.is_sound_on));
 }
 
 fn handle_sound_events(
-    mut sound_event: EventReader<SoundEffects>,
+    mut sound_event: EventReader<SoundEffectEvents>,
     sounds: Res<SoundAssetHolder>,
     audio: Res<AudioChannel<Effects>>,
     shield_audio: Res<AudioChannel<ShieldAudio>>,
@@ -71,53 +119,72 @@ fn handle_sound_events(
             return;
         }
         match event {
-            SoundEffects::NormalButton => {
-                audio.play(sounds.normal_button.clone()).with_volume(0.3);
+            SoundEffectEvents::NormalButton => {
+                audio
+                    .play(sounds.normal_button.clone())
+                    .with_volume(0.3 * game_settings.effects_sound_level.1);
             }
-            SoundEffects::SmallUpgradeButton => {
-                audio.play(sounds.normal_button.clone()).with_volume(0.3);
+            SoundEffectEvents::SmallUpgradeButton => {
+                audio
+                    .play(sounds.normal_button.clone())
+                    .with_volume(0.3 * game_settings.effects_sound_level.1);
             }
-            SoundEffects::UpgradeButton => {
-                audio.play(sounds.super_upgrade.clone()).with_volume(0.3);
+            SoundEffectEvents::UpgradeButton => {
+                audio
+                    .play(sounds.super_upgrade.clone())
+                    .with_volume(0.3 * game_settings.effects_sound_level.1);
             }
 
-            SoundEffects::ErrorButton => {
-                audio.play(sounds.error_button.clone()).with_volume(0.5);
+            SoundEffectEvents::ErrorButton => {
+                audio
+                    .play(sounds.error_button.clone())
+                    .with_volume(0.5 * game_settings.effects_sound_level.1);
             }
 
-            SoundEffects::PlanetDamaged => {
+            SoundEffectEvents::PlanetDamaged => {
                 audio.play(sounds.planet_damage.clone());
             }
-            SoundEffects::MissileLaunched => {
+            SoundEffectEvents::MissileLaunched => {
                 audio.play(sounds.missile_launch.clone());
             }
-            SoundEffects::MissileExplosion => {
-                audio.play(sounds.missile_explosion.clone()).with_volume(0.5);
+            SoundEffectEvents::MissileExplosion => {
+                audio
+                    .play(sounds.missile_explosion.clone())
+                    .with_volume(0.5 * game_settings.effects_sound_level.1);
             }
 
-            SoundEffects::ScanStarted => {
-                audio.play(sounds.scan_launch.clone()).with_volume(0.3);
+            SoundEffectEvents::ScanStarted => {
+                audio
+                    .play(sounds.scan_launch.clone())
+                    .with_volume(0.3 * game_settings.effects_sound_level.1);
             }
-            SoundEffects::ScanEnemy => {
-                audio.play(sounds.scan_ping.clone()).with_volume(0.3);
+            SoundEffectEvents::ScanEnemy => {
+                audio
+                    .play(sounds.scan_ping.clone())
+                    .with_volume(0.3 * game_settings.effects_sound_level.1);
             }
 
-            SoundEffects::EnemySpawnWarning => {
-                audio.play(sounds.enemy_warning.clone()).with_volume(3.0);
+            SoundEffectEvents::EnemySpawnWarning => {
+                audio
+                    .play(sounds.enemy_warning.clone())
+                    .with_volume(2.0 * game_settings.effects_sound_level.1);
             }
 
-            SoundEffects::ShieldOn(bool) => {
-                match *bool {
-                    true => {
-                        shield_audio.play(sounds.shield_on.clone()).with_volume(3.0).looped();
-                    }
-                    false => {
-                        shield_audio.stop();
-                    }
+            SoundEffectEvents::ShieldOn(bool) => match *bool {
+                true => {
+                    shield_audio
+                        .play(sounds.shield_on.clone())
+                        .with_volume(3.0 * game_settings.effects_sound_level.1)
+                        .looped();
                 }
-            }
-            SoundEffects::ShieldHit => {
-                audio.play(sounds.shield_hit.clone()).with_volume(3.0);
+                false => {
+                    shield_audio.stop();
+                }
+            },
+            SoundEffectEvents::ShieldHit => {
+                audio
+                    .play(sounds.shield_hit.clone())
+                    .with_volume(3.0 * game_settings.effects_sound_level.1);
             }
         }
     }

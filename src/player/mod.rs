@@ -10,21 +10,16 @@ use crate::{AssetHolder, GameState, RestartGameEvent};
 
 use crate::enemy::{Destroyed, Enemy};
 use crate::player::shield::shield_core::ShieldPlugin;
-use crate::sound::SoundEffects;
+use crate::sound::SoundEffectEvents;
 
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use iyes_loopless::prelude::*;
 
-
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            app.add_plugin(bevy_web_resizer::Plugin);
-        }
         app.add_plugin(ScannerPlugin)
             .add_enter_system(GameState::GameSetupOnce, setup_player)
             .add_system_set(
@@ -41,6 +36,7 @@ impl Plugin for PlayerPlugin {
                     .run_in_state(GameState::Playing)
                     .label("main_player_loop")
                     .with_system(handle_player_energy_and_health_recharge)
+                    .with_system(handle_time_score)
                     .with_system(handle_player_planet_collisions)
                     .with_system(handle_score_events.run_on_event::<ScoreEvent>())
                     .into(),
@@ -72,6 +68,7 @@ pub struct PlayerStats {
 
     pub(crate) current_points: u32,
     pub(crate) locked_score: u32,
+    pub(crate) time_till_next_score: f32,
 
     pub(crate) scan_speed: (f32, f32, f32),
     pub(crate) scan_energy_cost: u32,
@@ -108,6 +105,9 @@ pub struct PlayerStats {
     pub(crate) larger_missiles_upgrade_cost: u32,
 
     pub(crate) all_time_score_count: u32,
+
+    pub(crate) tutorial_panel: u32,
+    pub(crate) max_tut_panel: u32,
 }
 
 impl Default for PlayerStats {
@@ -131,8 +131,9 @@ impl Default for PlayerStats {
             missile_speed: (100., 500., 25.),
             missile_energy_cost: 1,
 
-            current_points: 0,
+            current_points: 40000,
             locked_score: 0,
+            time_till_next_score: 0.,
 
             scan_speed: (50.0, 200., 25.),
             scan_energy_cost: 2,
@@ -168,6 +169,9 @@ impl Default for PlayerStats {
             larger_missiles_upgrade_cost: 200,
 
             all_time_score_count: 0,
+
+            tutorial_panel: 0,
+            max_tut_panel: 6,
         }
     }
 }
@@ -411,6 +415,7 @@ impl PlayerStats {
     //score related stuff
     pub(crate) fn add_score(&mut self, amount: u32) {
         self.current_points += amount;
+        self.locked_score += amount;
     }
 
     pub(crate) fn lock_remaining_score(&mut self) -> bool {
@@ -448,6 +453,21 @@ impl PlayerStats {
 
     pub(crate) fn increase_all_time_score_count(&mut self, amount: u32) {
         self.all_time_score_count += amount;
+    }
+
+    pub(crate) fn next_tut_panel(&mut self) {
+        self.tutorial_panel += 1;
+        if self.tutorial_panel >= self.max_tut_panel {
+            self.tutorial_panel = self.max_tut_panel;
+        }
+    }
+
+    pub(crate) fn prev_tut_panel(&mut self) {
+        if self.tutorial_panel as i32 - 1 as i32 <= 0 {
+            self.tutorial_panel = 0;
+        } else {
+            self.tutorial_panel -= 1;
+        }
     }
 }
 
@@ -504,6 +524,14 @@ impl PlayerBundle {
     }
 }
 
+pub fn handle_time_score(mut player_stats: ResMut<PlayerStats>, time: Res<Time>) {
+    player_stats.time_till_next_score += time.delta_seconds();
+    if player_stats.time_till_next_score >= 1. {
+        player_stats.time_till_next_score -= 1.;
+        player_stats.add_score(1);
+    }
+}
+
 pub fn handle_player_energy_and_health_recharge(
     mut player_stats: ResMut<PlayerStats>,
     time: Res<Time>,
@@ -532,14 +560,14 @@ pub(crate) fn handle_player_planet_collisions(
     mut enemy_entities: Query<&Enemy>,
     mut player_stats: ResMut<PlayerStats>,
     mut commands: Commands,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     for entities in missiles.iter_mut() {
         for collision in entities.iter() {
             if let Ok(_enemy) = enemy_entities.get(collision) {
                 commands.entity(_enemy.scan_ghost).despawn();
                 commands.entity(collision).despawn();
-                sound_effect_writer.send(SoundEffects::PlanetDamaged);
+                sound_effect_writer.send(SoundEffectEvents::PlanetDamaged);
                 if player_stats.damage() {
                     commands.insert_resource(NextState(GameState::Lose));
                 }

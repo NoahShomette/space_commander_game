@@ -2,17 +2,16 @@
 use crate::player::*;
 use crate::AssetHolder;
 
+use crate::enemy::{Destroyed, Enemy};
 use bevy::prelude::*;
 use bevy_rapier2d::parry::transformation::utils::transform;
 use bevy_rapier2d::prelude::*;
-use crate::enemy::{Destroyed, Enemy};
 
 pub struct PlayerMissilePlugin;
 
 impl Plugin for PlayerMissilePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_event::<EnemyKilledEvent>()
+        app.add_event::<EnemyKilledEvent>()
             //handles spawning missiles events and updating missiles/checking if they have arrived
             .add_system_set(
                 ConditionSet::new()
@@ -29,7 +28,7 @@ impl Plugin for PlayerMissilePlugin {
         app.add_system_set(
             ConditionSet::new()
                 .with_system(handle_restart_game_events.run_on_event::<RestartGameEvent>())
-                .into()
+                .into(),
         );
         //handles missiles exploding
         app.add_system_set(
@@ -71,10 +70,14 @@ impl PlayerMissile {
         commands: &mut Commands,
         mouse_pos: Vec2,
         is_cluster_missile: bool,
+        mut sound_effect_writer: &mut EventWriter<SoundEffectEvents>,
     ) {
-        if player_stats.check_if_enough_energy(player_stats.missile_energy_cost) || is_cluster_missile {
+        if player_stats.check_if_enough_energy(player_stats.missile_energy_cost)
+            || is_cluster_missile
+        {
             if !is_cluster_missile {
                 player_stats.missile_fired();
+                sound_effect_writer.send(SoundEffectEvents::MissileLaunched);
             }
 
             let target = mouse_pos;
@@ -125,7 +128,6 @@ pub struct PlayerMissileTargetBundle {
 
 impl PlayerMissileTargetBundle {
     pub(crate) fn new(sprites: &Res<AssetHolder>, target: Vec2) -> PlayerMissileTargetBundle {
-
         PlayerMissileTargetBundle {
             sprite_bundle: SpriteBundle {
                 sprite: Default::default(),
@@ -200,22 +202,68 @@ pub(crate) fn handle_player_missile_spawn_events(
     mut player_stats: ResMut<PlayerStats>,
     mut commands: Commands,
     mut spawn_missile_event_reader: EventReader<PlayerInputEvents>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     for event in spawn_missile_event_reader.iter() {
         match event {
             PlayerInputEvents::FireMissile(target) => {
-                sound_effect_writer.send(SoundEffects::MissileLaunched);
-                PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, *target, false);
+                PlayerMissile::spawn(
+                    &sprites,
+                    &mut player_stats,
+                    &mut commands,
+                    *target,
+                    false,
+                    &mut sound_effect_writer,
+                );
                 if player_stats.is_cluster_missile_upgrade {
                     let mut cluster_dif: f32 = 20.;
                     if player_stats.is_larger_missiles_upgrade {
                         cluster_dif = 40.;
                     }
-                    PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, Vec2 { x: target.x, y: target.y + cluster_dif }, true);
-                    PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, Vec2 { x: target.x, y: target.y - cluster_dif }, true);
-                    PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, Vec2 { x: target.x + cluster_dif, y: target.y }, true);
-                    PlayerMissile::spawn(&sprites, &mut player_stats, &mut commands, Vec2 { x: target.x - cluster_dif, y: target.y }, true);
+                    PlayerMissile::spawn(
+                        &sprites,
+                        &mut player_stats,
+                        &mut commands,
+                        Vec2 {
+                            x: target.x,
+                            y: target.y + cluster_dif,
+                        },
+                        true,
+                        &mut sound_effect_writer,
+                    );
+                    PlayerMissile::spawn(
+                        &sprites,
+                        &mut player_stats,
+                        &mut commands,
+                        Vec2 {
+                            x: target.x,
+                            y: target.y - cluster_dif,
+                        },
+                        true,
+                        &mut sound_effect_writer,
+                    );
+                    PlayerMissile::spawn(
+                        &sprites,
+                        &mut player_stats,
+                        &mut commands,
+                        Vec2 {
+                            x: target.x + cluster_dif,
+                            y: target.y,
+                        },
+                        true,
+                        &mut sound_effect_writer,
+                    );
+                    PlayerMissile::spawn(
+                        &sprites,
+                        &mut player_stats,
+                        &mut commands,
+                        Vec2 {
+                            x: target.x - cluster_dif,
+                            y: target.y,
+                        },
+                        true,
+                        &mut sound_effect_writer,
+                    );
                 }
             }
             PlayerInputEvents::Scan => {}
@@ -256,14 +304,22 @@ pub(crate) fn update_missiles(
 pub(crate) fn missile_explode(
     sprites: Res<AssetHolder>,
     mut missile_query: Query<
-        (Entity, &mut Handle<Image>, &mut PlayerMissile, &mut Velocity, &mut Transform),
+        (
+            Entity,
+            &mut Handle<Image>,
+            &mut PlayerMissile,
+            &mut Velocity,
+            &mut Transform,
+        ),
         Changed<PlayerMissile>,
     >,
     mut commands: Commands,
     player_stats: Res<PlayerStats>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
-    for (entity, mut sprite, mut player_missile, mut velocity, mut transform) in missile_query.iter_mut() {
+    for (entity, mut sprite, mut player_missile, mut velocity, mut transform) in
+    missile_query.iter_mut()
+    {
         if player_missile.reached_target {
             velocity.linvel = Vec2::ZERO;
             let mut radius: f32 = 8.;
@@ -274,7 +330,7 @@ pub(crate) fn missile_explode(
                 *sprite = sprites.player_missile_explosion.clone();
             }
             if !player_missile.already_played_explosion_sound {
-                sound_effect_writer.send(SoundEffects::MissileExplosion);
+                sound_effect_writer.send(SoundEffectEvents::MissileExplosion);
                 player_missile.already_played_explosion_sound = true;
             }
             commands.entity(entity).insert(Collider::ball(radius));
@@ -294,13 +350,18 @@ pub(crate) fn handle_missile_collisions(
                 missiles.reached_target = true;
                 missiles.enemy_killed = true;
                 commands.entity(collision).insert(Destroyed);
-                enemy_killed_event_writer.send(EnemyKilledEvent { location: _enemy.1.translation.truncate() });
+                enemy_killed_event_writer.send(EnemyKilledEvent {
+                    location: _enemy.1.translation.truncate(),
+                });
             }
         }
     }
 }
 
-fn handle_restart_game_events(mut commands: Commands, mut missiles: Query<(Entity, &PlayerMissile)>) {
+fn handle_restart_game_events(
+    mut commands: Commands,
+    mut missiles: Query<(Entity, &PlayerMissile)>,
+) {
     for (missile, player_missile) in missiles.iter_mut() {
         commands.entity(player_missile.target_entity).despawn();
         commands.entity(missile).despawn();

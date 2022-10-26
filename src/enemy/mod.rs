@@ -230,7 +230,7 @@ pub(crate) fn handle_enemy_scanned(
             }
             *visibility = Visibility { is_visible: true };
             commands.entity(scanned_enemy).insert(VisibilityTimer {
-                visibility_timer: Timer::new(Duration::from_secs_f32(0.5), false),
+                visibility_timer: Timer::new(Duration::from_secs_f32(1.0), false),
             });
             commands.entity(scanned_enemy).remove::<Scanned>();
         }

@@ -1,3 +1,4 @@
+
 const lAudioContext = (typeof AudioContext !== 'undefined' ? AudioContext : (typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : undefined));
 let wasm;
 
@@ -215,7 +216,6 @@ function makeMutClosure(arg0, arg1, dtor, f) {
 
     return real;
 }
-
 function __wbg_adapter_34(arg0, arg1) {
     wasm._dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hadcd6f9d65cc6869(arg0, arg1);
 }
@@ -1902,16 +1902,16 @@ function getImports() {
         const ret = makeMutClosure(arg0, arg1, 19308, __wbg_adapter_58);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper50477 = function (arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 20495, __wbg_adapter_61);
+    imports.wbg.__wbindgen_closure_wrapper50484 = function (arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 20499, __wbg_adapter_61);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper60122 = function (arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 22277, __wbg_adapter_64);
+    imports.wbg.__wbindgen_closure_wrapper60129 = function (arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 22281, __wbg_adapter_64);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper68033 = function (arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 24554, __wbg_adapter_67);
+    imports.wbg.__wbindgen_closure_wrapper68087 = function (arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 24602, __wbg_adapter_67);
         return addHeapObject(ret);
     };
 

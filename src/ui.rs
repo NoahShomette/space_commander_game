@@ -3,10 +3,12 @@ use crate::*;
 use bevy::app::AppExit;
 
 use crate::egui::style::Margin;
-use crate::sound::SoundEffects;
+use crate::sound::SoundEffectEvents;
 use bevy::prelude::*;
 use bevy_egui::egui::*;
 use bevy_egui::*;
+use bevy_rapier2d::na::one;
+use bevy_rapier2d::rapier::crossbeam::channel::{at, never};
 use egui::{FontFamily, FontId, RichText, TextStyle};
 use iyes_loopless::prelude::*;
 
@@ -211,7 +213,9 @@ fn main_menu_ui(
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
     mut player_stats: ResMut<PlayerStats>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
+    mut sound_settings_writer: EventWriter<SoundSettingsEvents>,
+    mut game_settings: ResMut<GameSettings>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
@@ -221,7 +225,166 @@ fn main_menu_ui(
         ..default()
     };
 
-    egui::Window::new("pause_screen")
+    let settings_frame = Frame {
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 0),
+        stroke: Stroke::new(0., Color32::WHITE),
+        ..default()
+    };
+
+    egui::Window::new("options")
+        .frame(settings_frame)
+        .anchor(Align2::CENTER_TOP, egui::Vec2 { x: 0.0, y: 32. })
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.columns(2, |ui| {
+                if game_settings.is_sound_on {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(
+                            RichText::new("SOUND")
+                                .text_style(small_button_font())
+                                .color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                        ),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_sound(&mut sound_settings_writer);
+                    };
+                } else {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("SOUND").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_sound(&mut sound_settings_writer);
+                    };
+                }
+                if game_settings.is_bg_sound_on {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(
+                            RichText::new("MUSIC")
+                                .text_style(small_button_font())
+                                .color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                        ),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_bg_sound(&mut sound_settings_writer);
+                    };
+                } else {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("MUSIC").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_bg_sound(&mut sound_settings_writer);
+                    };
+                }
+
+                let sound_info = game_settings.sound_level.clone();
+                ui[1].add_sized(
+                    [80., 26.],
+                    Slider::new(
+                        &mut game_settings.sound_level.1,
+                        sound_info.0..=sound_info.2,
+                    )
+                        .text("Master"),
+                );
+                let sound_info = game_settings.bg_sound_level.clone();
+                ui[1].add_sized(
+                    [80., 26.],
+                    Slider::new(
+                        &mut game_settings.bg_sound_level.1,
+                        sound_info.0..=sound_info.2,
+                    )
+                        .text("Music"),
+                );
+                let sound_info = game_settings.effects_sound_level.clone();
+                if ui[1]
+                    .add_sized(
+                        [80., 26.],
+                        Slider::new(
+                            &mut game_settings.effects_sound_level.1,
+                            sound_info.0..=sound_info.2,
+                        )
+                            .text("Effects"),
+                    )
+                    .dragged()
+                {
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
+                }
+
+                sound_settings_writer.send(SoundSettingsEvents::SoundVolumeMaster(
+                    game_settings.sound_level.1 as f64,
+                ))
+            });
+        });
+
+    egui::Window::new("main_menu_tut_window")
+        .frame(my_frame)
+        .anchor(
+            Align2::CENTER_TOP,
+            egui::Vec2 {
+                x: 0.0,
+                y: (wnd.height() / 4.0),
+            },
+        )
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.vertical_centered(|ui| {
+                let mut tutorial_text = "";
+                match player_stats.tutorial_panel {
+                    0 => {
+                        tutorial_text = "Welcome! Click next to learn how to play!";
+                    }
+                    1 => {
+                        tutorial_text = "Your planet lies in the center. Defend it from incoming invaders.";
+                    }
+                    2 => {
+                        tutorial_text =
+                            "The invaders are invisible, scan for their location with [RMB]";
+                    }
+                    3 => {
+                        tutorial_text = "Once you know where the invader is and what their speed is, launch a missile where you think they will be using [LMB].";
+                    }
+                    4 => {
+                        tutorial_text = "Open the upgrade menu by pressing the pause button, pressing escape, or pressing tab";
+                    }
+                    5 => {
+                        tutorial_text = "Hold [space] to turn on the shield. \n\
+                        Energy generation is turned off when the shield is active";
+                    }
+                    6 => {
+                        tutorial_text = "That's it! Good luck!";
+                    }
+                    _ => {
+                        tutorial_text = "That's it! Good luck!";
+                    }
+                }
+                ui.add_space(8.);
+                ui.label(RichText::new(tutorial_text).text_style(small_button_font()));
+                ui.add_space(8.);
+            });
+            ui.columns(3, |ui| {
+                let menu_button =
+                    ui[0].add_sized([80., 26.], egui::Button::new(RichText::new("PREV")));
+                if menu_button.clicked() {
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
+                    player_stats.prev_tut_panel();
+                };
+                let menu_button =
+                    ui[2].add_sized([80., 26.], egui::Button::new(RichText::new("NEXT")));
+                if menu_button.clicked() {
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
+                    player_stats.next_tut_panel();
+                };
+            });
+        });
+
+    egui::Window::new("main_menu_window")
         .frame(my_frame)
         .anchor(
             Align2::CENTER_BOTTOM,
@@ -248,14 +411,14 @@ fn main_menu_ui(
                 let menu_button =
                     ui[0].add_sized([80., 26.], egui::Button::new(RichText::new("QUIT")));
                 if menu_button.clicked() {
-                    sound_effect_writer.send(SoundEffects::NormalButton);
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
                     quit_game(exit);
                 };
                 let menu_button =
                     ui[1].add_sized([80., 26.], egui::Button::new(RichText::new("PLAY")));
                 if menu_button.clicked() {
                     commands.insert_resource(NextState(GameState::Playing));
-                    sound_effect_writer.send(SoundEffects::NormalButton);
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
                 };
             });
         });
@@ -268,7 +431,7 @@ fn playing_ui(
     mut player_stats: ResMut<PlayerStats>,
     enemy_stats: Res<EnemyStats>,
     mut commands: Commands,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
@@ -301,7 +464,7 @@ fn playing_ui(
                 );
                 if menu_button.clicked() {
                     commands.insert_resource(NextState(GameState::Pause));
-                    sound_effect_writer.send(SoundEffects::NormalButton);
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
                 };
             });
 
@@ -317,7 +480,7 @@ fn playing_ui(
                     );
                     if menu_button.clicked() {
                         player_stats.toggle_auto_scan();
-                        sound_effect_writer.send(SoundEffects::NormalButton);
+                        sound_effect_writer.send(SoundEffectEvents::NormalButton);
                     };
                 } else {
                     let menu_button = ui[0].add_sized(
@@ -328,7 +491,7 @@ fn playing_ui(
                     );
                     if menu_button.clicked() {
                         player_stats.toggle_auto_scan();
-                        sound_effect_writer.send(SoundEffects::NormalButton);
+                        sound_effect_writer.send(SoundEffectEvents::NormalButton);
                     };
                 }
                 let scan_info = player_stats.auto_scan_info.clone();
@@ -358,13 +521,21 @@ fn playing_ui(
                     ));
                 });
                 ui.group(|ui| {
-                    ui.label("HEALTH");
+                    ui.label(RichText::new(format!(
+                        "HEALTH: {}/{}",
+                        player_stats.current_health, player_stats.max_health
+                    )));
                     ui.horizontal_wrapped(|ui| {
                         for i in 0..player_stats.max_health {
-                            if i < player_stats.current_health {
-                                ui.image(health, [(16 * 3) as f32, (16 * 3) as f32]);
+                            if i > 26 {
+                                ui.label(RichText::new(format!("    ...")));
+                                break;
                             } else {
-                                ui.image(health_empty, [(16 * 3) as f32, (16 * 3) as f32]);
+                                if i < player_stats.current_health {
+                                    ui.image(health, [(16 * 3) as f32, (16 * 3) as f32]);
+                                } else {
+                                    ui.image(health_empty, [(16 * 3) as f32, (16 * 3) as f32]);
+                                }
                             }
                         }
                     });
@@ -419,8 +590,11 @@ fn playing_ui(
         .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered_justified(|ui| {
                 ui.spacing_mut().item_spacing.y = 8.;
-                ui.label(&format!("SCORE: {}", player_stats.locked_score));
-                ui.label(&format!("POINTS: {}", player_stats.current_points));
+                ui.label(&format!("TOTAL SCORE: {}", player_stats.locked_score));
+                ui.label(&format!(
+                    "AVAILABLE POINTS: {}",
+                    player_stats.current_points
+                ));
                 ui.label(&format!(
                     "ENEMIES ALIVE: {}",
                     enemy_stats.current_enemy_amount
@@ -435,15 +609,11 @@ fn pause_ui(
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
     mut player_stats: ResMut<PlayerStats>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
+    mut sound_settings_writer: EventWriter<SoundSettingsEvents>,
+    mut game_settings: ResMut<GameSettings>,
 ) {
     let wnd = windows.get_primary().unwrap();
-
-    let my_frame = Frame {
-        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-        //stroke: Stroke::new(0., Color32::WHITE),
-        ..default()
-    };
 
     let game_frame = Frame {
         fill: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
@@ -456,6 +626,102 @@ fn pause_ui(
         },
         ..default()
     };
+
+    let settings_frame = Frame {
+        fill: Color32::from_rgba_unmultiplied(0, 0, 0, 0),
+        stroke: Stroke::new(0., Color32::WHITE),
+        ..default()
+    };
+
+    egui::Window::new("options")
+        .frame(settings_frame)
+        .anchor(Align2::CENTER_TOP, egui::Vec2 { x: 0.0, y: 32. })
+        .resizable(false)
+        .collapsible(false)
+        .title_bar(false)
+        .show(egui_context.ctx_mut(), |ui| {
+            ui.columns(2, |ui| {
+                if game_settings.is_sound_on {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(
+                            RichText::new("SOUND")
+                                .text_style(small_button_font())
+                                .color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                        ),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_sound(&mut sound_settings_writer);
+                    };
+                } else {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("SOUND").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_sound(&mut sound_settings_writer);
+                    };
+                }
+                if game_settings.is_bg_sound_on {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(
+                            RichText::new("MUSIC")
+                                .text_style(small_button_font())
+                                .color(Color32::from_rgba_unmultiplied(0, 200, 0, 255)),
+                        ),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_bg_sound(&mut sound_settings_writer);
+                    };
+                } else {
+                    let menu_button = ui[0].add_sized(
+                        [80., 26.],
+                        egui::Button::new(RichText::new("MUSIC").text_style(small_button_font())),
+                    );
+                    if menu_button.clicked() {
+                        game_settings.toggle_bg_sound(&mut sound_settings_writer);
+                    };
+                }
+
+                let sound_info = game_settings.sound_level.clone();
+                ui[1].add_sized(
+                    [80., 26.],
+                    Slider::new(
+                        &mut game_settings.sound_level.1,
+                        sound_info.0..=sound_info.2,
+                    )
+                        .text("Master"),
+                );
+                let sound_info = game_settings.bg_sound_level.clone();
+                ui[1].add_sized(
+                    [80., 26.],
+                    Slider::new(
+                        &mut game_settings.bg_sound_level.1,
+                        sound_info.0..=sound_info.2,
+                    )
+                        .text("Music"),
+                );
+                let sound_info = game_settings.effects_sound_level.clone();
+                if ui[1]
+                    .add_sized(
+                        [80., 26.],
+                        Slider::new(
+                            &mut game_settings.effects_sound_level.1,
+                            sound_info.0..=sound_info.2,
+                        )
+                            .text("Effects"),
+                    )
+                    .dragged()
+                {
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
+                }
+
+                sound_settings_writer.send(SoundSettingsEvents::SoundVolumeMaster(
+                    game_settings.sound_level.1 as f64,
+                ))
+            });
+        });
 
     egui::Window::new("pause_screen")
         .frame(game_frame)
@@ -478,6 +744,7 @@ fn pause_ui(
                         ui[1].horizontal_centered(|ui| {
                             ui.label(&format!("SCORE: {}", player_stats.locked_score));
                         });
+                        /*
                         ui[2].set_max_height(40.);
                         ui[2].horizontal_centered(|ui| {
                             //LOCK POINTS BUTTON
@@ -494,12 +761,14 @@ fn pause_ui(
                             );
                             if max_energy_button.clicked() {
                                 if player_stats.lock_remaining_score() {
-                                    sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                    sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                 } else {
-                                    sound_effect_writer.send(SoundEffects::ErrorButton);
+                                    sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                 }
                             }
                         });
+                        
+                         */
                     });
                 });
                 //ui.spacing_mut().item_spacing.y = 32.;
@@ -531,9 +800,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_max_energy() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -559,9 +828,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_energy_charge() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -595,9 +864,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_energy_charge_speed() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -622,9 +891,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_max_health() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -657,9 +926,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.plus_current_health() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -694,9 +963,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_scan_speed() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -720,9 +989,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_shield_time() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -755,9 +1024,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_missile_speed() {
-                                        sound_effect_writer.send(SoundEffects::SmallUpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::SmallUpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -798,9 +1067,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_cluster_missile() {
-                                        sound_effect_writer.send(SoundEffects::UpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::UpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -830,9 +1099,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_energy_vampire() {
-                                        sound_effect_writer.send(SoundEffects::UpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::UpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -862,9 +1131,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_dying_scanners() {
-                                        sound_effect_writer.send(SoundEffects::UpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::UpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -894,9 +1163,9 @@ fn pause_ui(
                                 );
                                 if max_energy_button.clicked() {
                                     if player_stats.upgrade_larger_missiles() {
-                                        sound_effect_writer.send(SoundEffects::UpgradeButton);
+                                        sound_effect_writer.send(SoundEffectEvents::UpgradeButton);
                                     } else {
-                                        sound_effect_writer.send(SoundEffects::ErrorButton);
+                                        sound_effect_writer.send(SoundEffectEvents::ErrorButton);
                                     }
                                 }
                             });
@@ -912,7 +1181,7 @@ fn pause_ui(
                         egui::Button::new(RichText::new("QUIT").text_style(small_button_font())),
                     );
                     if menu_button.clicked() {
-                        sound_effect_writer.send(SoundEffects::NormalButton);
+                        sound_effect_writer.send(SoundEffectEvents::NormalButton);
                         quit_game(exit);
                     };
 
@@ -925,7 +1194,7 @@ fn pause_ui(
                     );
                     if menu_button.clicked() {
                         commands.insert_resource(NextState(GameState::MainMenu));
-                        sound_effect_writer.send(SoundEffects::NormalButton);
+                        sound_effect_writer.send(SoundEffectEvents::NormalButton);
                     };
 
 
@@ -935,7 +1204,7 @@ fn pause_ui(
                     );
                     if menu_button.clicked() {
                         commands.insert_resource(NextState(GameState::Playing));
-                        sound_effect_writer.send(SoundEffects::NormalButton);
+                        sound_effect_writer.send(SoundEffectEvents::NormalButton);
                     };
 
                 });
@@ -948,8 +1217,9 @@ fn lose_ui(
     windows: Res<Windows>,
     mut exit: EventWriter<AppExit>,
     mut commands: Commands,
-    mut player_stats: ResMut<PlayerStats>,
-    mut sound_effect_writer: EventWriter<SoundEffects>,
+    player_stats: Res<PlayerStats>,
+    enemy_stats: Res<EnemyStats>,
+    mut sound_effect_writer: EventWriter<SoundEffectEvents>,
 ) {
     let wnd = windows.get_primary().unwrap();
 
@@ -971,6 +1241,10 @@ fn lose_ui(
                     ui.vertical_centered_justified(|ui| {
                         ui.label(&format!("GAME OVER"));
                         ui.label(&format!("FINAL SCORE: {}", player_stats.locked_score));
+                        ui.label(&format!(
+                            "You fought {} invaders!",
+                            enemy_stats.all_time_enemy_count
+                        ));
                     });
                 });
                 ui.spacing_mut().item_spacing.y = 32.;
@@ -983,7 +1257,7 @@ fn lose_ui(
                 );
                 if menu_button.clicked() {
                     quit_game(exit);
-                    sound_effect_writer.send(SoundEffects::NormalButton);
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
                 };
                 let menu_button = ui[1].add_sized(
                     [80., 26.],
@@ -991,7 +1265,7 @@ fn lose_ui(
                 );
                 if menu_button.clicked() {
                     commands.insert_resource(NextState(GameState::MainMenu));
-                    sound_effect_writer.send(SoundEffects::NormalButton);
+                    sound_effect_writer.send(SoundEffectEvents::NormalButton);
                 };
             });
         });
